@@ -158,15 +158,34 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .bubble{background:var(--sheet)}
 .bubble textarea{display:block;width:100%;border:0;background:transparent;resize:none;overflow:hidden;padding:0;min-height:1.6em;line-height:1.65;outline:none}
 .t-serif .bubble{border:1.5px solid var(--ink);border-radius:20px;padding:9px 14px}
-.t-serif textarea{font-family:var(--f-type);font-size:15px;font-weight:500}
+.t-serif textarea,.t-serif .txt{font-family:var(--f-type);font-size:15px;font-weight:500}
 .t-mono .bubble{border:1.5px dashed var(--ink-3);border-radius:10px;padding:8px 12px}
-.t-mono textarea{font-family:var(--f-type);font-size:14.5px;color:var(--ink-2)}
+.t-mono textarea,.t-mono .txt{font-family:var(--f-type);font-size:14.5px;color:var(--ink-2)}
 .t-nare .bubble{border:1.5px solid var(--ink);border-radius:0;padding:8px 12px;box-shadow:3px 3px 0 var(--line)}
-.t-nare textarea{font-size:13.5px}
+.t-nare textarea,.t-nare .txt{font-size:13.5px}
 .t-memo .bubble{background:var(--memo);border-radius:4px;padding:8px 12px;transform:rotate(-.4deg)}
-.t-memo textarea{font-size:13px;color:var(--memo-ink)}
+.t-memo textarea,.t-memo .txt{font-size:13px;color:var(--memo-ink)}
 .sortable-ghost{opacity:.35}
-.sortable-chosen .bubble{box-shadow:0 8px 24px rgba(18,28,48,.18)}
+.sortable-chosen .bubble{box-shadow:0 10px 28px rgba(18,28,48,.22)}
+.sortable-chosen{transform:scale(1.02);transition:transform .12s}
+.card-meta{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;padding:2px 6px 2px 2px;border-radius:6px;font-size:11.5px;color:var(--ink-3);min-width:0;max-width:calc(100% - 64px);cursor:pointer}
+.card-meta:hover{background:var(--sheet-2)}
+.card-meta .who{font-weight:700;color:var(--ink-2);display:inline-flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.card-meta .who::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--kc,var(--line));flex:none}
+.card-meta .kind{white-space:nowrap}
+.bubble{cursor:grab}
+.card.editing .bubble{cursor:text}
+.bubble .txt{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;min-height:1.65em;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.bubble .txt.empty{color:var(--ink-3)}
+.sec-head{cursor:grab}
+.sec-head input{cursor:text}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 10px 8px;max-width:300px}
+.chip{border:1px solid var(--line);background:var(--sheet);border-radius:999px;height:32px;padding:0 12px;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.chip.spk::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--kc,var(--line))}
+.chip.on{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.pop .item.on::after{content:"✓";float:right;margin-left:12px;color:var(--blue)}
+.btn .ico{display:none}
+@media (hover:none){.hover-only{display:none!important}}
 
 /* ---------- Characters ---------- */
 .char-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
@@ -328,13 +347,8 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 @media (hover:none),(pointer:coarse){
   .mini{opacity:1;width:32px;height:32px;font-size:16px}
   .grip{width:32px;height:34px;font-size:14px}
-  .card-bar .grip{width:30px;height:32px}
-  .chip-sel{height:32px;font-size:16px;padding:0 4px}
-  .chip-sel.ctype{max-width:118px;flex:0 1 auto}
-  .chip-sel.cspk{flex:1 1 90px;min-width:84px;max-width:none}
+  .card-meta{font-size:12.5px;min-height:30px}
   .sec{width:330px;flex-basis:330px}
-  .card-bar [data-act="ins"]{display:none}
-  .card-bar .sp{flex:0 0 0}
   .sec-menu{width:36px;height:36px}
   .add-chip{height:34px;padding:0 12px;font-size:13px}
   .btn.sm{height:34px;padding:0 12px;font-size:13.5px}
@@ -348,12 +362,42 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
   .target input{height:34px}
 }
 @media (max-width:640px){
-  .sec{width:min(300px,84vw);flex-basis:min(300px,84vw)}
-  .add-sec{width:min(220px,60vw);flex-basis:min(220px,60vw)}
+  /* header: one compact row + full-width tabs */
+  .appbar{padding-block:8px}
+  .bar-row{gap:6px}
+  .logo-text{display:none}
+  .proj{flex:1 1 0;order:1}
+  .bar-actions{order:2;margin-left:0;gap:4px;flex-wrap:nowrap}
+  .tabs{order:3;width:100%}
+  .tabs button{flex:1;padding:5px 8px}
+  .status{font-size:0;gap:0;width:14px;justify-content:center}
+  #syncBtn{font-size:0;gap:0;width:34px;padding:0;justify-content:center}
+  #themeBtn{display:none}
+  #expMenuBtn{width:34px;padding:0;justify-content:center}
+  #expMenuBtn .lbl{display:none}
+  #expMenuBtn .ico{display:inline;font-size:17px}
+  /* page header */
+  main{padding-block:12px 80px}
+  .banner{padding:8px 12px;font-size:12.5px;gap:6px 10px;margin-bottom:10px}
+  .plot-head{margin-bottom:8px}
+  .title-in{font-size:18px;flex-basis:100%}
+  .stats{display:none}
+  .budget{flex-wrap:nowrap;gap:8px;margin:0 0 10px}
+  .bar{flex:1 1 60px}
+  .budget-msg{font-size:12px;white-space:nowrap}
+  /* tools: one scrollable line */
+  .tools{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding-inline:max(16px,env(safe-area-inset-left,0px));padding-bottom:2px}
+  .tools::-webkit-scrollbar{display:none}
+  .tools > *{flex:none}
+  .temp{padding:8px 10px 2px}
+  .temp-help{display:none}
+  /* one section per screen, snapping */
+  .board-scroll{scroll-snap-type:x proximity;margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding-inline:max(16px,env(safe-area-inset-left,0px))}
+  .board.cols .sec{width:calc(100vw - 52px);flex-basis:calc(100vw - 52px);scroll-snap-align:center}
+  .add-sec{width:min(200px,56vw);flex-basis:min(200px,56vw);scroll-snap-align:center}
   .board.rows .card{width:100%}
-  .title-in{font-size:19px}
-  .bar-actions{margin-left:0;width:100%;justify-content:space-between}
-  .proj{flex-basis:100%}
+  .cards{padding:2px 8px 6px;gap:8px}
+  .sec-foot{padding:6px 8px 8px}
 }
 @media (min-width:641px) and (max-width:1100px){
   .chars{grid-template-columns:minmax(0,1fr)}
@@ -416,7 +460,7 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 <body>
 <header class="appbar">
   <div class="bar-row">
-    <div class="logo"><span class="logo-mark" aria-hidden="true">帖</span>プロット帖</div>
+    <div class="logo"><span class="logo-mark" aria-hidden="true">帖</span><span class="logo-text">プロット帖</span></div>
     <div class="proj">
       <label class="sr" for="projSel">作品を切り替え</label>
       <select id="projSel"></select>
@@ -429,14 +473,15 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
     <div class="bar-actions">
       <span class="status" id="status" data-s="saved">保存済み</span>
       <button class="sync" id="syncBtn" data-s="off" hidden>ドライブにつなぐ</button>
-      <button class="btn primary" id="expMenuBtn" aria-haspopup="menu">書き出し ▾</button>
+      <button class="icon-btn" id="themeBtn" aria-label="表示の明るさ" title="表示の明るさ">◐</button>
+      <button class="btn primary" id="expMenuBtn" aria-haspopup="menu" aria-label="書き出し"><span class="lbl">書き出し ▾</span><span class="ico" aria-hidden="true">⇩</span></button>
     </div>
   </div>
 </header>
 
 <main id="main">
   <div class="banner" id="sampleBanner" hidden>
-    <span><b>サンプルの作品です。</b>自由に書き換えて試せます。</span>
+    <span><b>サンプルです。</b>自由に書き換えて試せます。</span>
     <span class="sp"></span>
     <button class="btn sm" id="newFromSample">空のプロットを作る</button>
     <button class="btn sm ghost" id="hideSample">このまま使う</button>
@@ -462,10 +507,10 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
       <button class="btn sm" id="addSecBtn">＋ 区切りを追加</button>
       <button class="btn sm" id="tempBtn" aria-pressed="true">温度グラフ</button>
       <button class="btn sm" id="sideBtn" aria-pressed="false">資料を横に出す <span class="badge" id="sideBadge" hidden></span></button>
-      <span class="hint">⋮⋮ をドラッグで並べ替え ／ Ctrl+Enter で下にカードを追加</span>
+      <span class="hint">カードをつかんで並べ替え ／ 押すと編集 ／ Ctrl+Enter で下に追加</span>
     </div>
     <div class="temp" id="tempPanel">
-      <div class="temp-h"><b>二人の距離感</b><span class="hint">点を上下にドラッグして、区切りごとに0（遠い）〜10（近い）を付けます。点を選んで Delete で消せます。</span><span class="hint" id="tempPeak"></span></div>
+      <div class="temp-h"><b>二人の距離感</b><span class="hint temp-help">点を上下にドラッグして、区切りごとに0（遠い）〜10（近い）を付けます。</span><span class="hint" id="tempPeak"></span></div>
       <div class="temp-scroll" id="tempWrap"></div>
     </div>
     <div class="plot-grid" id="plotGrid">
@@ -612,7 +657,7 @@ const downloads=true;
 const LS_TOMB='plotcho.deleted';
 const dirty=new Set(); let saving=false, again=false, saveTimer=null, pendingRender=false;
 let sortables=[]; let lastUndo=null;
-let sideOpen=!!lsGet(LS_SIDE), sideTab=['chars','notes','fs'].includes(lsGet(LS_SIDETAB))?lsGet(LS_SIDETAB):'chars', showTemp=lsGet(LS_TEMPV)!==false;
+let sideOpen=!!lsGet(LS_SIDE), sideTab=['chars','notes','fs'].includes(lsGet(LS_SIDETAB))?lsGet(LS_SIDETAB):'chars', showTemp=(v=>v==null?!matchMedia('(max-width:640px)').matches:v!==false)(lsGet(LS_TEMPV));
 
 function P(){ return projects[cur]; }
 function firstId(){ return Object.values(projects).sort((a,b)=>a.createdAt-b.createdAt)[0]?.id||null; }
@@ -796,19 +841,53 @@ function speakerSel(c){
     h('option',{value:''},'話者なし'),
     ...P().chars.map(x=>h('option',{value:x.id,selected:x.id===c.speaker},x.name||'名前未設定')));
 }
+const PH={memo:'ト書き・演出メモ',nare:'ナレーション',mono:'モノローグ',serif:'セリフ'};
+function textView(c){ return h('div',{class:'txt'+(c.text.trim()?'':' empty')},c.text.trim()?c.text:PH[c.type]+'（押して入力）'); }
+function cardMeta(c){
+  const ch=(c.type==='serif'||c.type==='mono')?charById(c.speaker):null;
+  return h('button',{class:'card-meta','data-act':'meta','aria-label':'種類と話者を変える',title:'種類と話者を変える',style:ch?`--kc:var(--${ch.color})`:null},
+    ch?h('span',{class:'who'},ch.name||'名前未設定'):null, h('span',{class:'kind'},TYPE_LABEL[c.type]));
+}
 function cardEl(c){
-  const ta=h('textarea',{rows:1,'aria-label':TYPE_LABEL[c.type],placeholder:c.type==='memo'?'ト書き・演出メモ':c.type==='nare'?'ナレーション':c.type==='mono'?'モノローグ':'セリフ',value:c.text});
   return h('article',{class:'card t-'+c.type,dataset:{id:c.id}},
     h('div',{class:'card-bar'},
-      h('button',{class:'grip card-grip','aria-label':'カードを並べ替え',title:'ドラッグで並べ替え'},'⋮⋮'),
-      h('select',{class:'chip-sel ctype','aria-label':'種類'},...TYPES.map(([k,l])=>h('option',{value:k,selected:k===c.type},l))),
-      (c.type==='serif'||c.type==='mono')?speakerSel(c):null,
+      cardMeta(c),
       h('span',{class:'sp'}),
-      h('button',{class:'mini','data-act':'ins','aria-label':'下にカードを追加',title:'下に追加'},'＋'),
-      h('button',{class:'mini','data-act':'cmenu','aria-label':'カードのメニュー',title:'複製・伏線'},'⋯'),
-      h('button',{class:'mini del','data-act':'del','aria-label':'削除',title:'削除'},'×')),
-    h('div',{class:'bubble'},ta),
+      h('button',{class:'mini','data-act':'cmenu','aria-label':'カードのメニュー',title:'追加・複製・伏線・削除'},'⋯'),
+      h('button',{class:'mini del hover-only','data-act':'del','aria-label':'削除',title:'削除'},'×')),
+    h('div',{class:'bubble','data-act':'edit',tabindex:0,role:'button','aria-label':TYPE_LABEL[c.type]+'を編集'},textView(c)),
     fsTag(c));
+}
+function startEdit(el){
+  if(!el||el.classList.contains('editing')) return;
+  const {card}=findCard(el.dataset.id); if(!card) return;
+  const ta=h('textarea',{rows:1,'aria-label':TYPE_LABEL[card.type],placeholder:PH[card.type],value:card.text});
+  el.classList.add('editing');
+  el.querySelector('.bubble').replaceChildren(ta);
+  autosize(ta); ta.focus(); try{ ta.setSelectionRange(ta.value.length,ta.value.length); }catch{}
+}
+function endEdit(el){
+  if(!el||!el.classList.contains('editing')) return;
+  const {card}=findCard(el.dataset.id); el.classList.remove('editing');
+  if(card) el.querySelector('.bubble').replaceChildren(textView(card));
+}
+function metaMenu(anchor,card){
+  popover(anchor,close=>{
+    const done=()=>{ close(); touch(); rerenderCard(card.id); updateStats(); };
+    const speaking=card.type==='serif'||card.type==='mono';
+    return [
+      h('div',{class:'label'},'種類'),
+      h('div',{class:'chips'},...TYPES.map(([k,l])=>h('button',{class:'chip'+(card.type===k?' on':''),onclick:()=>{
+        card.type=k;
+        if(k!=='serif'&&k!=='mono') card.speaker='';
+        else if(!card.speaker){ const f=findCard(card.id); card.speaker=guessSpeaker(f.sec,f.idx,k); }
+        done(); }},l))),
+      speaking&&P().chars.length?[
+        h('div',{class:'label'},'話者'),
+        h('div',{class:'chips'},...P().chars.map(x=>h('button',{class:'chip spk'+(card.speaker===x.id?' on':''),style:`--kc:var(--${x.color})`,onclick:()=>{ card.speaker=x.id; done(); }},x.name||'名前未設定')),
+          h('button',{class:'chip'+(!card.speaker?' on':''),onclick:()=>{ card.speaker=''; done(); }},'なし'))]:null
+    ];
+  });
 }
 function fsTag(c){
   if(!c.fs) return null; const f=P().foreshadows.find(x=>x.id===c.fs.id); if(!f) return null;
@@ -816,12 +895,11 @@ function fsTag(c){
 }
 function rerenderCard(id){
   const el=board.querySelector(`.card[data-id="${id}"]`); const {card}=findCard(id); if(!el||!card) return;
-  const n=cardEl(card); el.replaceWith(n); autosize(n.querySelector('textarea'));
+  const n=cardEl(card); el.replaceWith(n);
 }
 function secEl(s){
   return h('section',{class:'sec',dataset:{id:s.id},style:`--hue:var(--${s.hue})`},
     h('header',{class:'sec-head'},
-      h('button',{class:'grip sec-grip','aria-label':'区切りを並べ替え',title:'ドラッグで並べ替え'},'⋮⋮'),
       h('input',{class:'sec-title',value:s.title,'aria-label':'区切りの名前',placeholder:'区切りの名前'}),
       h('label',{class:'sec-pages',title:'予定ページ数'},h('input',{type:'number',min:0,inputmode:'numeric',value:String(s.pages||''),placeholder:'0','aria-label':'予定ページ数'}),'P'),
       h('button',{class:'sec-menu','data-act':'secmenu','aria-label':'区切りのメニュー'},'⋯')),
@@ -836,13 +914,16 @@ function renderBoard(){
   board.className='board '+p.layout;
   queueMicrotask(()=>{ renderBudget(); renderSide(); renderTemp(); });
   board.replaceChildren(...p.sections.map(secEl), h('button',{class:'add-sec','data-act':'addsec'},'＋ 区切りを追加'));
-  requestAnimationFrame(()=>board.querySelectorAll('textarea').forEach(autosize));
   if(!window.Sortable) return;
   const anim=REDUCED?0:150;
-  const touchOpts={forceFallback:false,fallbackTolerance:4,touchStartThreshold:4,scroll:true,scrollSensitivity:70,bubbleScroll:true};
-  sortables.push(Sortable.create(board,{...touchOpts,handle:'.sec-grip',draggable:'.sec',animation:anim,onEnd:syncFromDom}));
-  board.querySelectorAll('.cards').forEach(el=>sortables.push(Sortable.create(el,{...touchOpts,group:'cards',handle:'.card-grip',draggable:'.card',animation:anim,swapThreshold:.6,onEnd:syncFromDom})));
+  // カード全体をつかんで動かす。タッチは長押しで持ち上げる（そのまま動かすとスクロール）
+  const opts={animation:anim,forceFallback:true,fallbackOnBody:true,delay:220,delayOnTouchOnly:true,touchStartThreshold:6,fallbackTolerance:3,scroll:true,scrollSensitivity:80,bubbleScroll:true,preventOnFilter:false,
+    onStart:()=>{ board.classList.add('dragging'); if(navigator.vibrate) try{ navigator.vibrate(12); }catch{} },
+    onEnd:()=>{ board.classList.remove('dragging'); dragEndAt=Date.now(); syncFromDom(); }};
+  sortables.push(Sortable.create(board,{...opts,handle:'.sec-head',draggable:'.sec',filter:'input,button,label'}));
+  board.querySelectorAll('.cards').forEach(el=>sortables.push(Sortable.create(el,{...opts,group:'cards',draggable:'.card',filter:'textarea,.mini,.fs-tag',swapThreshold:.6})));
 }
+let dragEndAt=0;
 function syncFromDom(){
   const p=P(); const cards={}, secs={};
   p.sections.forEach(s=>{ secs[s.id]=s; s.cards.forEach(c=>cards[c.id]=c); });
@@ -872,7 +953,7 @@ function guessSpeaker(sec,idx,type){
 function addCard(sec,type,at=sec.cards.length,base){
   const c=base?{...clone(base),id:rid('k')}:{id:rid('k'),type,speaker:guessSpeaker(sec,at,type),text:''};
   sec.cards.splice(at,0,c); touch(); renderBoard(); updateStats();
-  requestAnimationFrame(()=>{ const t=board.querySelector(`.card[data-id="${c.id}"] textarea`); if(t){ t.focus(); t.scrollIntoView({block:'nearest',inline:'nearest'}); } });
+  requestAnimationFrame(()=>{ const el=board.querySelector(`.card[data-id="${c.id}"]`); if(el){ startEdit(el); el.scrollIntoView({block:'nearest',inline:'nearest'}); } });
 }
 function addSection(at=P().sections.length){
   const p=P(); const used=new Set(p.sections.map(s=>s.hue));
@@ -887,29 +968,28 @@ board.addEventListener('input',e=>{
   else if(t.matches('.sec-title')){ secOf(t).title=t.value; touch(); sideSoon(); tempSoon(); }
   else if(t.matches('.sec-pages input')){ secOf(t).pages=Math.max(0,Math.round(Number(t.value)||0)); touch(); updateStats(); }
 });
-board.addEventListener('change',e=>{
-  const t=e.target; const el=t.closest('.card'); if(!el) return;
-  const {card}=findCard(el.dataset.id); if(!card) return;
-  if(t.matches('.ctype')){ card.type=t.value; if(card.type!=='serif'&&card.type!=='mono') card.speaker=''; else if(!card.speaker){ const f=findCard(card.id); card.speaker=guessSpeaker(f.sec,f.idx,card.type); } }
-  else if(t.matches('.cspk')) card.speaker=t.value;
-  else return;
-  touch(); rerenderCard(card.id); updateStats();
+board.addEventListener('focusout',e=>{
+  if(e.target.matches('.card textarea')){ const el=e.target.closest('.card'); setTimeout(()=>{ if(!el.contains(document.activeElement)) endEdit(el); },0); }
 });
 board.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&e.target.matches('.card textarea')){
     e.preventDefault(); const {sec,idx,card}=findCard(e.target.closest('.card').dataset.id);
     if(sec) addCard(sec,card.type,idx+1);
-  }
+  }else if(e.key==='Escape'&&e.target.matches('.card textarea')){ e.target.blur(); }
+  else if((e.key==='Enter'||e.key===' ')&&e.target.matches('.bubble')){ e.preventDefault(); startEdit(e.target.closest('.card')); }
 });
 board.addEventListener('click',e=>{
+  if(Date.now()-dragEndAt<300) return;
   const b=e.target.closest('[data-act]'); if(!b) return;
   const act=b.dataset.act;
+  if(act==='edit') return startEdit(b.closest('.card'));
   if(act==='addsec') return addSection();
   if(act==='add') return addCard(secOf(b),b.dataset.type);
   if(act==='secmenu') return secMenu(b,secOf(b));
   const {sec,idx,card}=findCard(b.closest('.card')?.dataset.id);
   if(!card) return;
   if(act==='ins') addCard(sec,card.type,idx+1);
+  else if(act==='meta') metaMenu(b,card);
   else if(act==='cmenu') cardMenu(b,sec,idx,card);
   else if(act==='fs') fsMenu(b,card);
   else if(act==='del'){
@@ -925,6 +1005,8 @@ function secMenu(anchor,s){
     h('div',{class:'row'},...HUES.map(([k,l])=>h('button',{class:'sw','aria-label':l,'aria-pressed':String(s.hue===k),style:`background:var(--${k})`,onclick:()=>{ s.hue=k; touch(); close(); renderBoard(); }}))),
     h('hr'),
     h('button',{class:'item',onclick:()=>{ close(); openBulk(s.id); }},'まとめて入力'),
+    idx>0?h('button',{class:'item',onclick:()=>{ close(); p.sections.splice(idx,1); p.sections.splice(idx-1,0,s); touch(); renderBoard(); }},'ひとつ前へ移動'):null,
+    idx<p.sections.length-1?h('button',{class:'item',onclick:()=>{ close(); p.sections.splice(idx,1); p.sections.splice(idx+1,0,s); touch(); renderBoard(); }},'ひとつ後ろへ移動'):null,
     h('button',{class:'item',onclick:()=>{ close(); addSection(idx+1); }},'うしろに区切りを追加'),
     h('button',{class:'item',onclick:()=>{ close(); addSection(idx); }},'まえに区切りを追加'),
     s.temp!=null?h('button',{class:'item',onclick:()=>{ close(); s.temp=null; touch(); renderTemp(); }},'距離感を消す'):null,
@@ -1049,7 +1131,13 @@ function cardMenu(anchor,sec,idx,card){
   popover(anchor,close=>[
     h('button',{class:'item',onclick:()=>{ close(); addCard(sec,card.type,idx+1); }},'下にカードを追加'),
     h('button',{class:'item',onclick:()=>{ close(); addCard(sec,card.type,idx+1,card); }},'複製'),
-    h('button',{class:'item',onclick:()=>{ close(); fsMenu(anchor,card); }},card.fs?'伏線を変更…':'伏線を付ける…')
+    h('button',{class:'item',onclick:()=>{ close(); fsMenu(anchor,card); }},card.fs?'伏線を変更…':'伏線を付ける…'),
+    h('hr'),
+    h('button',{class:'item danger',onclick:()=>{
+      close(); sec.cards.splice(idx,1); touch(); renderBoard(); updateStats();
+      lastUndo=()=>{ const s=P().sections.find(x=>x.id===sec.id)||P().sections[0]; if(!s) return; s.cards.splice(Math.min(idx,s.cards.length),0,card); touch(); renderBoard(); updateStats(); };
+      toast('カードを削除しました',{label:'元に戻す',fn:()=>lastUndo&&lastUndo()});
+    }},'削除')
   ]);
 }
 function fsMenu(anchor,card){
@@ -1085,7 +1173,7 @@ function jumpTo(cardId){
   const el=board.querySelector(`.card[data-id="${cardId}"]`); if(!el) return;
   el.scrollIntoView({block:'center',inline:'center',behavior:REDUCED?'auto':'smooth'});
   el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
-  setTimeout(()=>el.querySelector('textarea')?.focus({preventScroll:true}),400);
+
 }
 
 /* ---------- side panel ---------- */
@@ -1600,6 +1688,28 @@ function openExport(){
   ],actions:[{label:'閉じる',fn:c=>c()},run]});
 }
 
+
+/* ---------- light / dark ---------- */
+const LS_THEME='plotcho.theme';
+const HOST_THEME=document.documentElement.getAttribute('data-theme');
+let theme=['auto','light','dark'].includes(lsGet(LS_THEME))?lsGet(LS_THEME):'auto';
+const THEME_LABEL={auto:'端末に合わせる',light:'ライト',dark:'ダーク'};
+const themeMetas=[...document.querySelectorAll('meta[name="theme-color"]')].map(m=>[m,m.getAttribute('content')]);
+function applyTheme(){
+  const root=document.documentElement;
+  if(theme==='auto'){ if(HOST_THEME) root.setAttribute('data-theme',HOST_THEME); else root.removeAttribute('data-theme'); }
+  else root.setAttribute('data-theme',theme);
+  themeMetas.forEach(([m,orig])=>m.setAttribute('content',theme==='auto'?orig:(theme==='dark'?'#1A1F29':'#FFFFFF')));
+  const b=$('#themeBtn'); if(b){ b.textContent=theme==='dark'?'☾':theme==='light'?'☀':'◐'; b.title='表示：'+THEME_LABEL[theme]; }
+}
+function setTheme(t){ theme=t; lsSet(LS_THEME,t); applyTheme(); renderTemp(); }
+function themeItems(close){
+  return [h('div',{class:'label'},'表示の明るさ'),
+    ...['auto','light','dark'].map(k=>h('button',{class:'item'+(theme===k?' on':''),onclick:()=>{ close(); setTheme(k); }},THEME_LABEL[k]))];
+}
+$('#themeBtn').addEventListener('click',e=>popover(e.currentTarget,close=>themeItems(close)));
+applyTheme();
+
 /* ================= projects menu & backup ================= */
 async function newProject(title){
   const p=blankProject(title); projects[p.id]=p; cur=p.id; lsSet(LS_CUR,cur); touch(p); renderAll();
@@ -1613,6 +1723,8 @@ $('#projMenuBtn').addEventListener('click',e=>{
     h('hr'),
     downloads?h('button',{class:'item',onclick:()=>{ close(); saveFile('プロット帖_バックアップ_'+today()+'.json',JSON.stringify({app:'plotcho',v:1,projects:Object.values(projects)},null,1)); }},'バックアップを保存（全作品）'):null,
     h('button',{class:'item',onclick:()=>{ close(); $('#jsonInput').click(); }},'バックアップを読み込む'),
+    h('hr'),
+    ...themeItems(close),
     h('hr'),
     h('button',{class:'item danger',onclick:async()=>{
       close();
