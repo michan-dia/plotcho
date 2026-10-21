@@ -5,5 +5,5 @@
   空のままなら、同期せずにその端末の中だけで使います。
 */
 window.PLOTCHO_CONFIG = {
-  googleClientId: ''
+  googleClientId: '253225844303-dff6svlnqi1amlpohka27s68bjgvfg6k.apps.googleusercontent.com'
 };
