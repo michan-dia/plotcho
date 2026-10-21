@@ -507,7 +507,7 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
       <button class="btn sm" id="addSecBtn">＋ 区切りを追加</button>
       <button class="btn sm" id="tempBtn" aria-pressed="true">温度グラフ</button>
       <button class="btn sm" id="sideBtn" aria-pressed="false">資料を横に出す <span class="badge" id="sideBadge" hidden></span></button>
-      <span class="hint">カードをつかんで並べ替え ／ 押すと編集 ／ Ctrl+Enter で下に追加</span>
+      <span class="hint">カードをつかんで並べ替え ／ 押すと編集 ／ Enterを2回で次のカード</span>
     </div>
     <div class="temp" id="tempPanel">
       <div class="temp-h"><b>二人の距離感</b><span class="hint temp-help">点を上下にドラッグして、区切りごとに0（遠い）〜10（近い）を付けます。</span><span class="hint" id="tempPeak"></span></div>
@@ -950,8 +950,8 @@ function guessSpeaker(sec,idx,type){
   }
   return prev.speaker;
 }
-function addCard(sec,type,at=sec.cards.length,base){
-  const c=base?{...clone(base),id:rid('k')}:{id:rid('k'),type,speaker:guessSpeaker(sec,at,type),text:''};
+function addCard(sec,type,at=sec.cards.length,base,text=''){
+  const c=base?{...clone(base),id:rid('k')}:{id:rid('k'),type,speaker:guessSpeaker(sec,at,type),text};
   sec.cards.splice(at,0,c); touch(); renderBoard(); updateStats();
   requestAnimationFrame(()=>{ const el=board.querySelector(`.card[data-id="${c.id}"]`); if(el){ startEdit(el); el.scrollIntoView({block:'nearest',inline:'nearest'}); } });
 }
@@ -972,6 +972,18 @@ board.addEventListener('focusout',e=>{
   if(e.target.matches('.card textarea')){ const el=e.target.closest('.card'); setTimeout(()=>{ if(!el.contains(document.activeElement)) endEdit(el); },0); }
 });
 board.addEventListener('keydown',e=>{
+  const t=e.target;
+  // Enterを2回（空行を入れる）と、そこで区切って次のカードへ。変換中のEnterは対象外
+  if(e.key==='Enter'&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.isComposing&&e.keyCode!==229&&t.matches('.card textarea')
+     &&t.selectionStart===t.selectionEnd&&t.selectionStart>0&&t.value[t.selectionStart-1]==='\n'){
+    e.preventDefault();
+    const {sec,idx,card}=findCard(t.closest('.card').dataset.id); if(!card) return;
+    const pos=t.selectionStart, before=t.value.slice(0,pos-1).replace(/\s+$/,''), rest=t.value.slice(pos).replace(/^\s+/,'');
+    if(!before){ t.value=rest; card.text=rest; autosize(t); touch(); return; }
+    card.text=before; touch();
+    addCard(sec,card.type,idx+1,null,rest);
+    return;
+  }
   if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&e.target.matches('.card textarea')){
     e.preventDefault(); const {sec,idx,card}=findCard(e.target.closest('.card').dataset.id);
     if(sec) addCard(sec,card.type,idx+1);
@@ -1524,6 +1536,10 @@ const IS_TOUCH=matchMedia('(hover:none),(pointer:coarse)').matches;
 async function saveFile(name,data){
   const ext=name.split('.').pop().toLowerCase();
   let blob=data instanceof Blob?data:new Blob([ext==='txt'?'﻿'+data:data],{type:MIME[ext]||'application/octet-stream'});
+  if(window.plotchoNative){ // PC版: 保存ダイアログで場所を選ぶ
+    try{ const ok=await window.plotchoNative.saveFile(name,await blob.arrayBuffer()); if(ok) toast('保存しました'); return ok; }
+    catch(e){ console.warn(e); toast('保存できませんでした'); return false; }
+  }
   if(IS_TOUCH&&navigator.canShare&&typeof File==='function'){
     try{
       const file=new File([blob],name,{type:blob.type});
@@ -1786,6 +1802,7 @@ if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostnam
 /* ================= boot ================= */
 (async()=>{
   await loadLocal(); renderAll(); setStatus('saved');
+  if(Drive&&Drive.init) await Drive.init();
   if(syncOn()){ setSync(Drive.hasToken()?'ok':(Drive.everConnected()?'need':'off')); if(Drive.hasToken()) syncNow(false); }
 })();
 })();

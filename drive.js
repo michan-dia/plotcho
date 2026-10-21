@@ -113,7 +113,37 @@
     return api('/drive/v3/files/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () { return true; });
   }
 
+  /* ---------- PC版(Electron): ログインと通信はメイン側に任せる ---------- */
+  var native = window.plotchoNative || null;
+  if (native) {
+    var st = { configured: false, signedIn: false };
+    var call = function (p) {
+      return p.then(function (r) {
+        if (r && r.ok) return r.value;
+        var e = new Error((r && r.message) || 'ドライブとの通信に失敗しました');
+        if (r && r.auth) { e.auth = true; st.signedIn = false; }
+        throw e;
+      });
+    };
+    window.PlotDrive = {
+      native: true,
+      init: function () { return native.authStatus().then(function (s) { st = s || st; }).catch(function () {}); },
+      enabled: function () { return st.configured; },
+      hasToken: function () { return st.signedIn; },
+      everConnected: function () { return st.signedIn; },
+      signIn: function () { return call(native.signIn()).then(function () { st.signedIn = true; }); },
+      signOut: function () { st.signedIn = false; return native.signOut(); },
+      list: function () { return call(native.driveList()); },
+      download: function (id) { return call(native.driveDownload(id)); },
+      upload: function (p, fileId) { return call(native.driveUpload(JSON.parse(JSON.stringify(p)), fileId || null)); },
+      remove: function (id) { return call(native.driveRemove(id)); }
+    };
+    return;
+  }
+
   window.PlotDrive = {
+    native: false,
+    init: function () { return Promise.resolve(); },
     enabled: enabled, hasToken: hasToken, everConnected: everConnected,
     signIn: signIn, signOut: signOut, list: list, download: download, upload: upload, remove: remove
   };
