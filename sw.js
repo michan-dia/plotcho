@@ -1,8 +1,9 @@
 /* プロット帖 — オフラインでも開けるようにするための仕組み */
-var VERSION = 'plotcho-v5';
+var VERSION = 'plotcho-v6';
 var FILES = [
   './',
   './index.html',
+  './help.html',
   './drive.js',
   './config.js',
   './manifest.webmanifest',

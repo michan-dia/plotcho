@@ -1740,6 +1740,8 @@ async function newProject(title){
 $('#projMenuBtn').addEventListener('click',e=>{
   const p=P();
   popover(e.currentTarget,close=>[
+    h('button',{class:'item',onclick:()=>{ close(); flush().finally(()=>{ location.href='help.html'; }); }},'使いかた'),
+    h('hr'),
     h('button',{class:'item',onclick:()=>{ close(); tab='plot'; newProject('無題のプロット'); }},'新しい作品'),
     h('button',{class:'item',onclick:()=>{ close(); const c=normalize({...clone(p),id:rid('p'),title:p.title+'のコピー',createdAt:Date.now(),sample:false}); projects[c.id]=c; cur=c.id; touch(c); renderAll(); toast('複製しました'); }},'この作品を複製'),
     h('hr'),

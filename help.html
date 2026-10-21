@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<link rel="icon" type="image/png" href="icons/favicon-64.png">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta charset="utf-8">
+<title>プロット帖 使いかた</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Shippori+Mincho+B1:wght@700&display=swap">
+<style>
+/* Layout: sticky contents rail on the left (PC), one readable column on the app's dotted 原稿用紙 desk */
+:root{
+  --paper:#ECEFF4; --sheet:#FFFFFF; --sheet-2:#F6F8FB; --ink:#1A2030; --ink-2:#556074; --ink-3:#8791A3;
+  --line:#D5DBE5; --dot:#C3CDDC; --blue:#2A66C9; --blue-soft:#E1EAF8;
+  --f-ui:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",Meiryo,sans-serif;
+  --f-title:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho",serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#11141B; --sheet:#1A1F29; --sheet-2:#202634; --ink:#E5E9F1; --ink-2:#A1AABB; --ink-3:#717B8E;
+  --line:#2D3443; --dot:#2A3140; --blue:#76A6F0; --blue-soft:#1D2A42; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --paper:#11141B; --sheet:#1A1F29; --sheet-2:#202634; --ink:#E5E9F1; --ink-2:#A1AABB; --ink-3:#717B8E;
+  --line:#2D3443; --dot:#2A3140; --blue:#76A6F0; --blue-soft:#1D2A42; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--f-ui);font-size:15.5px;line-height:1.85;
+  background-image:radial-gradient(var(--dot) 1px,transparent 1.2px);background-size:18px 18px;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.top{position:sticky;top:0;z-index:5;background:var(--sheet);border-bottom:1px solid var(--line);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px;
+  display:flex;align-items:center;gap:12px}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.06em;white-space:nowrap}
+.logo i{font-style:normal;width:22px;height:22px;border:2px solid var(--ink);border-radius:5px;display:grid;place-items:center;font-family:var(--f-title);font-size:12px;line-height:1}
+.logo span{color:var(--ink-3);font-weight:500}
+.back{margin-left:auto;text-decoration:none;color:var(--blue);border:1px solid var(--line);border-radius:8px;padding:5px 12px;font-size:13.5px;font-weight:500;white-space:nowrap;background:var(--sheet)}
+.back:hover{border-color:var(--blue)}
+.layout{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:230px minmax(0,1fr);gap:28px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 80px}
+nav{position:sticky;top:72px;align-self:start;max-height:calc(100vh - 92px);overflow:auto}
+nav p{margin:0 0 8px;font-size:12px;color:var(--ink-3);letter-spacing:.12em}
+nav ol{list-style:none;margin:0;padding:0;counter-reset:n}
+nav li{counter-increment:n}
+nav a{display:flex;gap:8px;padding:5px 10px;border-radius:7px;color:var(--ink-2);text-decoration:none;font-size:13.5px;line-height:1.5}
+nav a::before{content:counter(n);color:var(--ink-3);font-variant-numeric:tabular-nums;min-width:1.4em;text-align:right}
+nav a:hover{background:var(--sheet);color:var(--ink)}
+nav a.on{background:var(--sheet);color:var(--ink);font-weight:700;box-shadow:inset 3px 0 0 var(--blue)}
+details.mtoc{display:none}
+article{background:var(--sheet);border:1px solid var(--line);border-radius:16px;padding:36px clamp(18px,5vw,56px) 48px;min-width:0;
+  box-shadow:0 1px 2px rgba(18,28,48,.06),0 10px 30px rgba(18,28,48,.06)}
+h1{font-family:var(--f-title);font-size:clamp(28px,5vw,38px);line-height:1.3;margin:0 0 14px;letter-spacing:.04em;text-wrap:balance}
+h2{font-size:22px;margin:56px 0 12px;scroll-margin-top:76px;text-wrap:balance}
+h2::before{content:"";display:block;width:36px;height:4px;border-radius:2px;background:var(--blue);margin-bottom:12px}
+h3{font-size:17px;margin:30px 0 6px;scroll-margin-top:76px}
+p{margin:10px 0}
+a{color:var(--blue);text-underline-offset:3px}
+ul,ol{padding-left:1.4em;margin:10px 0}
+li{margin:4px 0}
+li::marker{color:var(--ink-3)}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.88em;background:var(--sheet-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14.5px;display:block;overflow-x:auto}
+th,td{border-bottom:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+th{font-size:12.5px;color:var(--ink-2);letter-spacing:.04em;font-weight:500;border-bottom-width:2px}
+article img{display:block;max-width:100%;height:auto;margin:16px 0 22px;border-radius:10px;border:1px solid var(--line);box-shadow:0 6px 20px rgba(18,28,48,.10)}
+article p:has(> img ~ img){display:flex;flex-wrap:wrap;gap:14px}
+article p:has(> img ~ img) img{width:calc((100% - 28px) / 3);margin:6px 0}
+article img[width]{width:auto}
+@media (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr);padding-top:16px}
+  nav{display:none}
+  details.mtoc{display:block;background:var(--sheet);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:12px}
+  details.mtoc summary{cursor:pointer;font-weight:700}
+  details.mtoc ol{margin:8px 0 4px;padding-left:1.6em;font-size:14.5px}
+  details.mtoc a{display:block;padding:3px 0;text-decoration:none}
+  article{border-radius:12px;padding-top:26px}
+  body{font-size:15px}
+}
+@media (max-width:640px){ article p:has(> img ~ img) img{width:100%} }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo"><i aria-hidden="true">帖</i>プロット帖<span>使いかた</span></div>
+  <a class="back" href="index.html">← アプリに戻る</a>
+</header>
+<div class="layout">
+  <nav aria-label="もくじ"><p>もくじ</p><ol>
+<li><a href="#はじめかた">はじめかた</a></li>
+<li><a href="#カードを書く">カードを書く</a></li>
+<li><a href="#カードを並べ替える">カードを並べ替える</a></li>
+<li><a href="#区切り起承転結">区切り(起承転結)</a></li>
+<li><a href="#まとめて入力">まとめて入力</a></li>
+<li><a href="#ページ数を確かめる">ページ数を確かめる</a></li>
+<li><a href="#温度グラフ二人の距離感">温度グラフ(二人の距離感)</a></li>
+<li><a href="#伏線チェック">伏線チェック</a></li>
+<li><a href="#キャラと作品の設定">キャラと作品の設定</a></li>
+<li><a href="#資料を横に出す">資料を横に出す</a></li>
+<li><a href="#書き出し">書き出し</a></li>
+<li><a href="#作品の管理とバックアップ">作品の管理とバックアップ</a></li>
+<li><a href="#ダークモード">ダークモード</a></li>
+<li><a href="#スマホで使う">スマホで使う</a></li>
+<li><a href="#端末どうしの同期googleドライブ">端末どうしの同期(Googleドライブ)</a></li>
+<li><a href="#困ったとき">困ったとき</a></li>
+  </ol></nav>
+  <main>
+    <details class="mtoc"><summary>もくじ</summary><ol>
+<li><a href="#はじめかた">はじめかた</a></li>
+<li><a href="#カードを書く">カードを書く</a></li>
+<li><a href="#カードを並べ替える">カードを並べ替える</a></li>
+<li><a href="#区切り起承転結">区切り(起承転結)</a></li>
+<li><a href="#まとめて入力">まとめて入力</a></li>
+<li><a href="#ページ数を確かめる">ページ数を確かめる</a></li>
+<li><a href="#温度グラフ二人の距離感">温度グラフ(二人の距離感)</a></li>
+<li><a href="#伏線チェック">伏線チェック</a></li>
+<li><a href="#キャラと作品の設定">キャラと作品の設定</a></li>
+<li><a href="#資料を横に出す">資料を横に出す</a></li>
+<li><a href="#書き出し">書き出し</a></li>
+<li><a href="#作品の管理とバックアップ">作品の管理とバックアップ</a></li>
+<li><a href="#ダークモード">ダークモード</a></li>
+<li><a href="#スマホで使う">スマホで使う</a></li>
+<li><a href="#端末どうしの同期googleドライブ">端末どうしの同期(Googleドライブ)</a></li>
+<li><a href="#困ったとき">困ったとき</a></li>
+    </ol></details>
+    <article>
+<h1 id="プロット帖-使いかた">プロット帖 使いかた</h1>
+<p>漫画のプロットを、セリフやモノローグのカードで組み立てるアプリです。
+カードを並べ替えながら話の流れを考え、できたセリフはCLIP STUDIO PAINTのストーリーエディターにそのまま流し込めます。</p>
+<p>スマホ・タブレット・PCのどれでも使えます。</p>
+<p><img loading="lazy" decoding="async" width="1280" alt="プロット帖の画面" src="docs/screenshots/01-overview.png" /></p>
+
+<h2 id="はじめかた">はじめかた</h2>
+<p>アプリのページを開くと、すぐに使えます。最初は「雨宿りの花屋(サンプル)」という作品が入っています。そのまま触って試すか、上の帯の「空のプロットを作る」で新しく始めてください。</p>
+<h3 id="ホーム画面アプリ一覧に追加する">ホーム画面・アプリ一覧に追加する</h3>
+<p>追加しておくと、アプリのように直接起動できます。一度開いたあとは、ネットにつながっていなくても起動して書けます。</p>
+<table>
+<thead>
+<tr>
+<th>端末</th>
+<th>追加のしかた</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>iPhone・iPad(Safari)</td>
+<td>共有ボタン →「ホーム画面に追加」</td>
+</tr>
+<tr>
+<td>Android(Chrome)</td>
+<td>右上の「︙」→「ホーム画面に追加」または「アプリをインストール」</td>
+</tr>
+<tr>
+<td>PC(Chrome・Edge)</td>
+<td>アドレスバーの右にあるインストールのボタン</td>
+</tr>
+</tbody>
+</table>
+<p>PC版(インストールするタイプ)を使っている場合は、デスクトップやスタートメニューの「プロット帖」から起動します。</p>
+
+<h2 id="カードを書く">カードを書く</h2>
+<p>セリフ・モノローグ・ナレーション・ト書きを、1枚ずつカードに書きます。カードは、仕上がりのフキダシに近い形で表示されます。</p>
+<table>
+<thead>
+<tr>
+<th>種類</th>
+<th>見た目</th>
+<th>ストーリーエディターへの書き出し</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>セリフ</td>
+<td>丸いフキダシ</td>
+<td>入る</td>
+</tr>
+<tr>
+<td>モノローグ</td>
+<td>点線の枠</td>
+<td>入る</td>
+</tr>
+<tr>
+<td>ナレーション</td>
+<td>四角い枠</td>
+<td>入る</td>
+</tr>
+<tr>
+<td>ト書き・メモ</td>
+<td>黄色い付箋</td>
+<td>入らない(演出のメモ用)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="書く直す">書く・直す</h3>
+<p>カードを押すと、青い枠が付いて書けるようになります。ほかの場所を押すと終わります。</p>
+<p><img loading="lazy" decoding="async" width="306" alt="カードを編集しているところ" src="docs/screenshots/02-card-edit.png" /></p>
+<ul>
+<li><strong>Enterを1回</strong>押すと、同じカードの中で改行します(2行のセリフなど)。</li>
+<li><strong>Enterを2回</strong>押すと、すぐ下に次のカードができて、そのまま続けて書けます。セリフの話者は、2人のあいだで交互に切り替わります。</li>
+<li>文章の途中でEnterを2回押すと、そこから後ろが次のカードに分かれます。</li>
+<li>区切りのいちばん下にある「＋ セリフ」「＋ モノローグ」などのボタンでも追加できます。</li>
+</ul>
+<h3 id="種類と話者を変える">種類と話者を変える</h3>
+<p>カードの上の「朝比奈 湊 ・ セリフ」のような表示を押すと、種類と話者を選べます。話者はキャラの色で表示されます。</p>
+<p><img loading="lazy" decoding="async" width="336" alt="種類と話者を選ぶ" src="docs/screenshots/03-card-meta.png" /></p>
+<h3 id="複製伏線削除">複製・伏線・削除</h3>
+<p>カードの右上の「⋯」から選びます。PCでは、カードにマウスをのせると出る「×」でも削除できます。削除したあと、画面の下に出る「元に戻す」を押すと戻せます。</p>
+<p><img loading="lazy" decoding="async" width="306" alt="カードのメニュー" src="docs/screenshots/04-card-menu.png" /></p>
+
+<h2 id="カードを並べ替える">カードを並べ替える</h2>
+<p>カードそのものをつかんで、好きな場所に動かします。別の区切りへも移せます。</p>
+<ul>
+<li><strong>PC</strong>: カードをつかんで(マウスのボタンを押したまま)動かします。</li>
+<li><strong>スマホ・タブレット</strong>: カードを少し長めに押すと持ち上がります。そのまま指を動かして、置きたい場所で離します。長押しせずに指を動かすと、普通のスクロールになります。</li>
+</ul>
+
+<h2 id="区切り起承転結">区切り(起承転結)</h2>
+<p>起・承・転・結のように、カードをまとめる枠です。</p>
+<ul>
+<li>名前は、見出しの文字を押して自由に変えられます。</li>
+<li>「＋ 区切りを追加」で、いくつでも増やせます。</li>
+<li>見出しの「◯P」に、その区切りの予定ページ数を入れます。</li>
+<li>見出しの空いているところをつかむと、区切りごと並べ替えられます。見出しの「⋯」の「ひとつ前へ移動」「ひとつ後ろへ移動」でも動かせます。</li>
+<li>見出しの「⋯」から、色の変更・前後への区切りの追加・削除ができます。</li>
+<li>上の「横に並べる」「縦に並べる」で、区切りの並べ方を切り替えられます。</li>
+</ul>
+
+<h2 id="まとめて入力">まとめて入力</h2>
+<p>先に文章で書いておいたセリフを、まとめてカードにできます。上の「まとめて入力」を押します。</p>
+<p><img loading="lazy" decoding="async" width="620" alt="まとめて入力" src="docs/screenshots/05-bulk.png" /></p>
+<ul>
+<li>空行を1行はさむと、そこで別のカードに分かれます。何枚に分かれるかが下に表示されます。</li>
+<li>次の書き方をすると、話者と種類を自動で振り分けます。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>書き方</th>
+<th>なるカード</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>湊「おはようございます」</code></td>
+<td>湊のセリフ</td>
+</tr>
+<tr>
+<td><code>久世：……おう</code></td>
+<td>久世のセリフ</td>
+</tr>
+<tr>
+<td><code>(今日は、いつもより早い)</code></td>
+<td>モノローグ</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>話者に「交互」を選ぶと、1人目と2人目のセリフが交互になります。</li>
+</ul>
+
+<h2 id="ページ数を確かめる">ページ数を確かめる</h2>
+<p>タイトルの下の「全◯P」に、作品全体の予定ページ数を入れます。区切りごとの予定ページ数が、色分けのバーで表示されます。</p>
+<p><img loading="lazy" decoding="async" width="1276" alt="ページ数のバー(オーバーしているところ)" src="docs/screenshots/06-budget.png" /></p>
+<ul>
+<li>合計が予定を超えると、超えた分が赤い斜線になり、「◯Pオーバー」と表示されます。はみ出した区切りのページ数の欄も赤くなります。</li>
+<li>足りないときは「残り◯P」、ちょうどのときは「ぴったり」と表示されます。</li>
+</ul>
+
+<h2 id="温度グラフ二人の距離感">温度グラフ(二人の距離感)</h2>
+<p>区切りごとに、二人の距離感を0(遠い)〜10(近い)で付けて、折れ線で表示します。告白や関係の成立をどこに置くか、いちゃいちゃの見せ場がどこにあるかを、グラフの形で確かめられます。</p>
+<p><img loading="lazy" decoding="async" width="1248" alt="温度グラフ" src="docs/screenshots/07-temp.png" /></p>
+<ul>
+<li>点を上下にドラッグして付けます。まだ付けていない区切りは、下に点線の丸が出ています。</li>
+<li>いちばん近い区切りには丸い印が付き、上に「いちばん近いのは『結』(10)」のように表示されます。</li>
+<li>上の「温度グラフ」ボタンで、表示・非表示を切り替えます(スマホでは、最初は閉じています)。</li>
+<li>付けた距離感を消すときは、区切りの「⋯」→「距離感を消す」を選びます。</li>
+</ul>
+
+<h2 id="伏線チェック">伏線チェック</h2>
+<p>伏線を「張る」カードと「回収」するカードを指定しておくと、回収し忘れを見つけられます。</p>
+<ol>
+<li>カードの「⋯」→「伏線を付ける…」を選びます。</li>
+<li>新しい伏線の名前を入れて「張る」を押すか、すでにある伏線の「張る」「回収」を押します。</li>
+<li>カードの下に、どの伏線かが表示されます。◇は張る、◆は回収です。</li>
+</ol>
+<p><img loading="lazy" decoding="async" width="306" alt="伏線が付いたカード" src="docs/screenshots/10-fs-tag.png" /></p>
+<p>伏線の一覧は「資料を横に出す」→「伏線」タブで見られます。</p>
+<p><img loading="lazy" decoding="async" width="320" alt="伏線の一覧" src="docs/screenshots/08-side-fs.png" /></p>
+<table>
+<thead>
+<tr>
+<th>表示</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>回収済み</td>
+<td>張って、そのあとで回収している</td>
+</tr>
+<tr>
+<td>未回収</td>
+<td>張ったまま回収していない</td>
+</tr>
+<tr>
+<td>張っていない</td>
+<td>回収だけあって、張る場所がない</td>
+</tr>
+<tr>
+<td>回収が先</td>
+<td>張るより前の場所で回収している</td>
+</tr>
+<tr>
+<td>未使用</td>
+<td>どのカードにも付いていない</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>「張る」「回収」の横の場所を押すと、そのカードへ移動します。</li>
+<li>未回収の数は、「資料を横に出す」ボタンにも赤く表示されます。</li>
+</ul>
+
+<h2 id="キャラと作品の設定">キャラと作品の設定</h2>
+<p>上の「キャラ・設定」タブで書きます。</p>
+<p><img loading="lazy" decoding="async" width="1280" alt="キャラ・設定タブ" src="docs/screenshots/11-chars.png" /></p>
+<h3 id="キャラ">キャラ</h3>
+<ul>
+<li>名前・よみ・立ち位置・年齢・身長・一人称・相手の呼び方・性格・外見・設定・メモを書けます。</li>
+<li>画像は何枚でも入れられます。左の枠を押すか、画像をドラッグ&amp;ドロップします。小さい画像を押すと大きく表示され、「メイン画像にする」「削除」ができます。</li>
+<li>名前の横の色は、プロットの話者の色にも使われます。</li>
+<li>「⋮⋮」をつかむと、キャラの順番を並べ替えられます。</li>
+</ul>
+<h3 id="作品の設定">作品の設定</h3>
+<p>能力の決まりごと、世界観、舞台、関係の前提など、作品ごとの設定を書いておく場所です。</p>
+<p><img loading="lazy" decoding="async" width="1248" alt="作品の設定" src="docs/screenshots/12-notes.png" /></p>
+
+<h2 id="資料を横に出す">資料を横に出す</h2>
+<p>プロットを書きながらキャラや設定を確かめたいときは、「資料を横に出す」を押します。キャラ・設定・伏線の3つのタブで横に表示されます(スマホでは下から出ます)。</p>
+<p><img loading="lazy" decoding="async" width="320" alt="資料パネルのキャラ" src="docs/screenshots/09-side-chars.png" /></p>
+<p>キャラのタブでは、身長が入っていれば身長差も表示されます。</p>
+
+<h2 id="書き出し">書き出し</h2>
+<p>右上の「書き出し」(スマホでは ⇩)から選びます。</p>
+<p><img loading="lazy" decoding="async" width="218" alt="書き出しのメニュー" src="docs/screenshots/13-export-menu.png" /></p>
+<h3 id="クリスタ用テキスト">クリスタ用テキスト</h3>
+<p>カードの順にテキストを並べて、カードごとに空行を1行はさみます。</p>
+<p><img loading="lazy" decoding="async" width="620" alt="クリスタ用テキスト" src="docs/screenshots/14-text-export.png" /></p>
+<ul>
+<li>「コピー」してストーリーエディターに貼るか、「.txt で保存」してストーリーエディターで読み込みます。</li>
+<li>「含めるカード」で、書き出す種類を選べます(ト書き・メモは最初から外してあります)。</li>
+<li>「区切りの見出しを入れる」「話者名を付ける」は確認用です。ストーリーエディターに入れるときは外してください。</li>
+</ul>
+<h3 id="pngpdf">PNG・PDF</h3>
+<p>編集さんに見せるときや、印刷して見直すときに使います。</p>
+<p><img loading="lazy" decoding="async" width="620" alt="PNG・PDFの書き出し" src="docs/screenshots/15-png-pdf.png" /></p>
+<ul>
+<li>「プロット」「キャラ・設定」「両方」から選べます。</li>
+<li>プロットは「一覧(上から読む)」と「ボード(見たまま)」の2つの見た目から選べます。</li>
+<li>温度グラフや伏線の一覧も入ります。</li>
+<li>PDFはA4サイズで、カードの途中でページが切れないように分けます。</li>
+</ul>
+
+<h2 id="作品の管理とバックアップ">作品の管理とバックアップ</h2>
+<p>作品名の横の「⋯」から行います。作品の切り替えは、作品名の欄で選びます。</p>
+<p><img loading="lazy" decoding="async" width="260" alt="作品のメニュー" src="docs/screenshots/16-project-menu.png" /></p>
+<ul>
+<li><strong>新しい作品</strong> / <strong>この作品を複製</strong> / <strong>この作品を削除</strong>(削除は元に戻せません)</li>
+<li><strong>バックアップを保存(全作品)</strong>: すべての作品を1つのファイルに保存します。キャラの画像も入ります。</li>
+<li><strong>バックアップを読み込む</strong>: 保存したファイルから作品を取り込みます。今ある作品は消えずに、追加されます。</li>
+</ul>
+<p>書いたものは、自動でその端末の中に保存されます。右上の「保存済み」がその合図です。</p>
+
+<h2 id="ダークモード">ダークモード</h2>
+<p>PCでは右上の ◐ のボタン、スマホでは作品名の横の「⋯」の中から選びます。</p>
+<ul>
+<li><strong>端末に合わせる</strong>: 端末の設定(ライト/ダーク)と同じにします</li>
+<li><strong>ライト</strong> / <strong>ダーク</strong>: いつもその表示にします</li>
+</ul>
+<p><img loading="lazy" decoding="async" width="1280" alt="ダークモード" src="docs/screenshots/18-dark.png" /></p>
+
+<h2 id="スマホで使う">スマホで使う</h2>
+<p>スマホでは、画面に合わせて表示がすっきりします。</p>
+<p>
+<img loading="lazy" decoding="async" src="docs/screenshots/19-phone.png" alt="スマホの画面" width="250">
+<img loading="lazy" decoding="async" src="docs/screenshots/20-phone-meta.png" alt="スマホで種類と話者を選ぶ" width="250">
+<img loading="lazy" decoding="async" src="docs/screenshots/21-phone-side.png" alt="スマホで資料を出す" width="250">
+</p>
+
+<ul>
+<li>区切りは1画面に1つずつ表示されます。横にスワイプすると、次の区切りに止まります。</li>
+<li>上のボタン類は、横にスクロールして選びます。</li>
+<li>カードを押すと書けます。カードを長押しすると、持ち上げて並べ替えられます。</li>
+<li>保存と同期の状態は、右上の点の色で表示されます(緑=保存済み・同期済み)。</li>
+</ul>
+
+<h2 id="端末どうしの同期googleドライブ">端末どうしの同期(Googleドライブ)</h2>
+<p>右上の「ドライブにつなぐ」を押してGoogleアカウントでログインすると、ほかの端末と同じ作品を編集できます。</p>
+<p><img loading="lazy" decoding="async" width="367" alt="ドライブにつなぐボタン" src="docs/screenshots/17-sync-button.png" /></p>
+<ul>
+<li>一度つなぐと、編集するたびに自動で同期します。アプリを開いたときや、ほかのアプリから戻ってきたときにも同期します。ボタンには「同期済み 1:05」のように最後に同期した時刻が出ます。</li>
+<li>ブラウザ・ホーム画面版では、ログインが1時間ほどで切れます。「再接続」になったら押してください。それまでに書いた分は、端末の中に保存されています。PC版は、一度ログインすれば続けて使えます。</li>
+<li>データはGoogleドライブの「アプリ専用の場所」に入ります。ドライブの画面には表示されません。</li>
+<li>同じ作品を2台で同時に書き換えた場合は、あとから保存したほうが残ります。</li>
+<li>ログインできるのは、アプリを置いた人がテスト用に登録したGoogleアカウントだけです。</li>
+<li>「ドライブにつなぐ」が出ていない場合や、つながなくても、その端末の中に保存して使えます。</li>
+</ul>
+
+<h2 id="困ったとき">困ったとき</h2>
+<p><strong>書いたものが見当たらない</strong>
+別の端末で書いた場合は、ドライブにつないで同期すると表示されます。ブラウザの閲覧データを消すと、その端末の中のデータも消えます。こまめに「バックアップを保存」しておくと安心です。</p>
+<p><strong>スマホでカードが動かない</strong>
+指を動かす前に、少し長めに押してください。すぐに動かすとスクロールになります。</p>
+<p><strong>Enterを押すと文字の変換が確定するだけで、次のカードにならない</strong>
+日本語の変換中のEnterは、確定にだけ使われます。確定したあとに、Enterを2回押してください。</p>
+<p><strong>「新しい版があります」と出た</strong>
+「切り替える」を押すと、最新の版になります。書いている内容はそのまま残ります。</p>
+<p><strong>PC版のインストーラーを開くと「WindowsによってPCが保護されました」と出る</strong>
+個人で作ったアプリなので、毎回この確認が出ます。「詳細情報」を押してから「実行」を押してください。</p>
+    </article>
+  </main>
+</div>
+<script>
+// アプリで選んだ明るさ(ライト/ダーク)に合わせる
+try{ var t=JSON.parse(localStorage.getItem('plotcho.theme')||'null'); if(t==='light'||t==='dark') document.documentElement.setAttribute('data-theme',t); }catch(e){}
+// いま読んでいる項目をもくじで示す
+(function(){
+  var links=[].slice.call(document.querySelectorAll('nav a'));
+  var map={}; links.forEach(function(a){ map[a.getAttribute('href').slice(1)]=a; });
+  if(!('IntersectionObserver' in window)) return;
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ links.forEach(function(a){a.classList.remove('on');}); var a=map[e.target.id]; if(a) a.classList.add('on'); } });
+  },{rootMargin:'-80px 0px -70% 0px'});
+  document.querySelectorAll('article h2[id]').forEach(function(h){ io.observe(h); });
+  document.querySelectorAll('details.mtoc a').forEach(function(a){ a.addEventListener('click',function(){ a.closest('details').open=false; }); });
+})();
+</script>
+</body>
+</html>
