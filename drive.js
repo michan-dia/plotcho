@@ -1,0 +1,120 @@
+/* プロット帖 — Googleドライブ(アプリ専用フォルダ)との通信 */
+(function () {
+  'use strict';
+  var cfg = window.PLOTCHO_CONFIG || {};
+  var CID = String(cfg.googleClientId || '').trim();
+  var SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+  var TOKEN_KEY = 'plotcho.gtoken';
+  var token = null, exp = 0, gis = null;
+
+  try {
+    var saved = JSON.parse(localStorage.getItem(TOKEN_KEY) || 'null');
+    if (saved && saved.exp > Date.now() + 60000) { token = saved.token; exp = saved.exp; }
+  } catch (e) { /* 保存なし */ }
+
+  function enabled() { return !!CID && !/ここに|xxxx/i.test(CID); }
+  function hasToken() { return !!token && Date.now() < exp - 60000; }
+  function everConnected() { try { return localStorage.getItem('plotcho.connected') === '1'; } catch (e) { return false; } }
+
+  function loadGis() {
+    if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
+    if (gis) return gis;
+    gis = new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.async = true;
+      s.onload = function () { res(); };
+      s.onerror = function () { gis = null; rej(new Error('Googleのログイン画面を読み込めませんでした。ネットにつながっているか確認してください。')); };
+      document.head.appendChild(s);
+    });
+    return gis;
+  }
+
+  /* ログイン(ボタンを押したときに呼ぶ。ポップアップが開きます) */
+  function signIn() {
+    return loadGis().then(function () {
+      return new Promise(function (res, rej) {
+        var client = google.accounts.oauth2.initTokenClient({
+          client_id: CID,
+          scope: SCOPE,
+          callback: function (r) {
+            if (!r || r.error) { rej(new Error(r && r.error_description || 'ログインできませんでした')); return; }
+            token = r.access_token;
+            exp = Date.now() + (Number(r.expires_in) || 3600) * 1000;
+            try {
+              localStorage.setItem(TOKEN_KEY, JSON.stringify({ token: token, exp: exp }));
+              localStorage.setItem('plotcho.connected', '1');
+            } catch (e) { /* 保存できなくても続ける */ }
+            res();
+          },
+          error_callback: function (e) {
+            rej(new Error(e && e.type === 'popup_closed' ? 'ログインの画面が閉じられました' : 'ログインの画面を開けませんでした'));
+          }
+        });
+        client.requestAccessToken({ prompt: everConnected() ? '' : 'consent' });
+      });
+    });
+  }
+
+  function signOut() {
+    var t = token; token = null; exp = 0;
+    try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem('plotcho.connected'); } catch (e) { /* なし */ }
+    if (t && window.google && google.accounts && google.accounts.oauth2) google.accounts.oauth2.revoke(t, function () {});
+  }
+
+  function api(path, opt) {
+    opt = opt || {};
+    var headers = Object.assign({ Authorization: 'Bearer ' + token }, opt.headers || {});
+    return fetch('https://www.googleapis.com' + path, Object.assign({}, opt, { headers: headers })).then(function (r) {
+      if (r.status === 401) {
+        token = null; exp = 0;
+        try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* なし */ }
+        var err = new Error('ログインの期限が切れました'); err.auth = true; throw err;
+      }
+      if (r.status === 404 && opt.method === 'DELETE') return r;
+      if (!r.ok) throw new Error('ドライブとの通信に失敗しました(' + r.status + ')');
+      return r;
+    });
+  }
+
+  /* アプリ専用フォルダの plotcho- で始まるファイルを全部 */
+  function list() {
+    var out = [];
+    function page(pt) {
+      var q = encodeURIComponent("name contains 'plotcho-' and trashed = false");
+      return api('/drive/v3/files?spaces=appDataFolder&pageSize=1000&fields=nextPageToken,files(id,name,modifiedTime,appProperties)&q=' + q + (pt ? '&pageToken=' + encodeURIComponent(pt) : ''))
+        .then(function (r) { return r.json(); })
+        .then(function (j) { out = out.concat(j.files || []); return j.nextPageToken ? page(j.nextPageToken) : out; });
+    }
+    return page('');
+  }
+
+  function download(id) {
+    return api('/drive/v3/files/' + encodeURIComponent(id) + '?alt=media').then(function (r) { return r.json(); });
+  }
+
+  /* 作品を1つ保存。fileId があれば上書き、なければ新しく作る */
+  function upload(project, fileId) {
+    var data = Object.assign({}, project);
+    delete data.remoteId; delete data.syncedAt;
+    var meta = { name: 'plotcho-' + project.id + '.json', mimeType: 'application/json', appProperties: { pid: project.id, updatedAt: String(project.updatedAt || 0) } };
+    if (!fileId) meta.parents = ['appDataFolder'];
+    var b = 'plotcho' + Math.random().toString(36).slice(2);
+    var body = '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) +
+      '\r\n--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(data) + '\r\n--' + b + '--';
+    var url = fileId
+      ? '/upload/drive/v3/files/' + encodeURIComponent(fileId) + '?uploadType=multipart&fields=id,modifiedTime'
+      : '/upload/drive/v3/files?uploadType=multipart&fields=id,modifiedTime';
+    return api(url, { method: fileId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body: body })
+      .then(function (r) { return r.json(); });
+  }
+
+  function remove(id) {
+    return api('/drive/v3/files/' + encodeURIComponent(id), { method: 'DELETE' }).then(function () { return true; });
+  }
+
+  window.PlotDrive = {
+    enabled: enabled, hasToken: hasToken, everConnected: everConnected,
+    signIn: signIn, signOut: signOut, list: list, download: download, upload: upload, remove: remove
+  };
+})();
