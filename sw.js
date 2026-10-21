@@ -1,5 +1,5 @@
 /* プロット帖 — オフラインでも開けるようにするための仕組み */
-var VERSION = 'plotcho-v4';
+var VERSION = 'plotcho-v5';
 var FILES = [
   './',
   './index.html',
