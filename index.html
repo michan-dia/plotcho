@@ -302,7 +302,15 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 /* ---------- Temperature graph ---------- */
 .temp{background:var(--sheet);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:10px 14px 4px;margin-bottom:14px}
 .temp-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px}
-.temp-h b{font-size:14px}
+.temp-h{align-items:center}
+.temp-title{font:inherit;font-weight:700;font-size:14px;color:var(--ink);border:0;border-bottom:1px dashed var(--line);background:transparent;padding:1px 2px;width:9em;min-width:3em;max-width:100%}
+@supports (field-sizing:content){.temp-title{field-sizing:content;width:auto}}
+.temp-title:hover{border-bottom-color:var(--ink-3)}
+.temp-title:focus{outline:none;border-bottom:1px solid var(--blue);background:var(--sheet-2)}
+.temp-ends{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-3)}
+.temp-ends input{font:inherit;font-size:12px;color:var(--ink-2);width:4.5em;border:1px solid var(--line);border-radius:6px;background:var(--sheet-2);padding:1px 6px}
+@supports (field-sizing:content){.temp-ends input{field-sizing:content;width:auto;min-width:2.5em}}
+.temp-ends input:focus{outline:none;border-color:var(--blue);background:var(--sheet)}
 .temp-scroll{overflow-x:auto;touch-action:pan-x}
 .temp svg{display:block;height:auto;user-select:none;-webkit-user-select:none}
 .temp .col{cursor:ns-resize;touch-action:none}
@@ -546,7 +554,7 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
       <span class="hint">カードをつかんで並べ替え ／ 押すと編集 ／ Enterを2回で次のカード</span>
     </div>
     <div class="temp" id="tempPanel">
-      <div class="temp-h"><b>二人の距離感</b><span class="hint temp-help">点を上下にドラッグして、区切りごとに0（遠い）〜10（近い）を付けます。</span><span class="hint" id="tempPeak"></span></div>
+      <div class="temp-h"><input class="temp-title" id="tempTitle" aria-label="グラフの名前" placeholder="グラフの名前"><span class="temp-ends"><label for="tempHigh">10＝</label><input id="tempHigh" aria-label="10の意味" placeholder="高い"><label for="tempLow">0＝</label><input id="tempLow" aria-label="0の意味" placeholder="低い"></span><span class="hint temp-help">点を上下にドラッグして、シーンごとに0〜10を付けます。</span><span class="hint" id="tempPeak"></span></div>
       <div class="temp-scroll" id="tempWrap"></div>
     </div>
     <div class="plot-grid" id="plotGrid">
@@ -625,15 +633,21 @@ function normalize(p){
   p.target=Math.max(0,Math.round(Number(p.target)||0));
   p.foreshadows=(Array.isArray(p.foreshadows)?p.foreshadows:[]).filter(f=>f&&f.id).map(f=>({id:String(f.id),name:String(f.name??'')}));
   const fsIds=new Set(p.foreshadows.map(f=>f.id));
+  const clampT=v=>(v==null||v===''||isNaN(Number(v)))?null:Math.max(0,Math.min(10,Math.round(Number(v))));
+  p.tempTitle=p.tempTitle==null?'二人の距離感':String(p.tempTitle);
+  p.tempHigh=p.tempHigh==null?'近い':String(p.tempHigh);
+  p.tempLow=p.tempLow==null?'遠い':String(p.tempLow);
   p.notes=(Array.isArray(p.notes)?p.notes:[]).filter(Boolean).map(n=>({id:n.id||rid('n'),title:String(n.title??''),body:String(n.body??'')}));
   for(const s of p.sections){
-    s.temp=(s.temp==null||s.temp===''||isNaN(Number(s.temp)))?null:Math.max(0,Math.min(10,Math.round(Number(s.temp))));
+    const oldTemp=clampT(s.temp); delete s.temp;
     s.id=s.id||rid('s'); s.title=String(s.title??''); s.pages=Math.max(0,Number(s.pages)||0);
     s.hue=HUES.some(x=>x[0]===s.hue)?s.hue:'s6';
     // 以前のデータ（区切りの中に直接カード）は、名前なしのシーン1つにまとめる
     if(!Array.isArray(s.scenes)) s.scenes=[{id:rid('m'),title:'',cards:Array.isArray(s.cards)?s.cards:[]}];
     delete s.cards;
-    s.scenes=s.scenes.filter(Boolean).map(n=>({id:n.id||rid('m'),title:String(n.title??''),collapsed:!!n.collapsed,cards:Array.isArray(n.cards)?n.cards:[]}));
+    s.scenes=s.scenes.filter(Boolean).map(n=>({id:n.id||rid('m'),title:String(n.title??''),collapsed:!!n.collapsed,temp:clampT(n.temp),cards:Array.isArray(n.cards)?n.cards:[]}));
+    // 以前の「区切りごとの距離感」は、その区切りのシーン全部に引き継ぐ
+    if(oldTemp!=null&&s.scenes.every(n=>n.temp==null)) s.scenes.forEach(n=>n.temp=oldTemp);
     if(!s.scenes.length) s.scenes.push(newScene());
     for(const n of s.scenes) for(const c of n.cards){ c.id=c.id||rid('k'); c.type=TYPE_LABEL[c.type]?c.type:'serif'; c.speaker=String(c.speaker||''); c.text=String(c.text??'');
       c.fs=(c.fs&&fsIds.has(c.fs.id)&&(c.fs.role==='set'||c.fs.role==='pay'))?{id:c.fs.id,role:c.fs.role}:null; }
@@ -646,7 +660,7 @@ function normalize(p){
   p.createdAt=Number(p.createdAt)||Date.now(); p.updatedAt=Number(p.updatedAt)||0; p.sample=!!p.sample;
   return p;
 }
-function newScene(title=''){ return {id:rid('m'),title,collapsed:false,cards:[]}; }
+function newScene(title=''){ return {id:rid('m'),title,collapsed:false,temp:null,cards:[]}; }
 const allCards=s=>s.scenes.flatMap(n=>n.cards);
 function blankProject(title='無題のプロット'){
   return normalize({id:rid('p'),title,layout:'cols',createdAt:Date.now(),chars:[],
@@ -655,7 +669,7 @@ function blankProject(title='無題のプロット'){
 function sampleProject(){
   const a=rid('c'),b=rid('c');
   const k=(type,text,speaker='',fs=null)=>({id:rid('k'),type,speaker,text,fs});
-  const sc=(title,...cards)=>({id:rid('m'),title,cards});
+  const sc=(title,temp,...cards)=>({id:rid('m'),title,temp,cards});
   const f1=rid('f'),f2=rid('f');
   return normalize({id:rid('p'),title:'雨宿りの花屋（サンプル）',sample:true,layout:'cols',createdAt:Date.now(),target:32,
     foreshadows:[{id:f1,name:'買った花の行方'},{id:f2,name:'金曜の花言葉'}],
@@ -670,30 +684,30 @@ function sampleProject(){
        bg:'祖母から継いだ「あさひな生花店」を一人で切り盛りしている。',memo:'',images:[]}
     ],
     sections:[
-      {id:rid('s'),title:'起',hue:'s1',pages:6,temp:2,scenes:[
-        sc('金曜、閉店間際の花屋',
+      {id:rid('s'),title:'起',hue:'s1',pages:6,scenes:[
+        sc('金曜、閉店間際の花屋',1,
           k('nare','駅前商店街のはずれにある、小さな花屋。'),
           k('memo','金曜、閉店間際。外は雨。'),
           k('serif','いらっしゃいませ。今日も一本ですか？',b),
           k('serif','……ああ。',a)),
-        sc('湊の気がかり',
+        sc('湊の気がかり',2,
           k('mono','毎週同じ時間に来て、毎回ちがう花を一本だけ。\n誰に渡してるんだろう。',b,{id:f1,role:'set'}))]},
-      {id:rid('s'),title:'承',hue:'s2',pages:8,temp:4,scenes:[
-        sc('雨宿り',
+      {id:rid('s'),title:'承',hue:'s2',pages:8,scenes:[
+        sc('雨宿り',4,
           k('memo','雨が強くなり、久世は店先で雨宿りすることに。'),
           k('serif','よかったら中で待っててください。お茶いれますから。',b),
           k('serif','……悪い。',a),
           k('mono','近くで見ると、思っていたより手が大きい。',b)),
-        sc('花言葉の話',
+        sc('花言葉の話',5,
           k('memo','湊、祖母に教わった花言葉の話をする。久世は黙って聞いている。','',{id:f2,role:'set'}))]},
-      {id:rid('s'),title:'転',hue:'s3',pages:10,temp:7,scenes:[
-        sc('向かいの窓辺',
+      {id:rid('s'),title:'転',hue:'s3',pages:10,scenes:[
+        sc('向かいの窓辺',6,
           k('memo','閉店後、湊は向かいの工務店の窓辺に、自分が売った花がずらりと並んでいるのを見つける。','',{id:f1,role:'pay'})),
-        sc('告白',
+        sc('告白',9,
           k('serif','これ、全部……誰かに渡してたんじゃないんですか？',b),
           k('serif','渡せなかった。\n……あんたに渡したかったんだ。',a))]},
-      {id:rid('s'),title:'結',hue:'s4',pages:8,temp:10,scenes:[
-        sc('最初の金曜日',
+      {id:rid('s'),title:'結',hue:'s4',pages:8,scenes:[
+        sc('最初の金曜日',10,
           k('memo','付き合いはじめて最初の金曜日。'),
           k('serif','今日は二本くれ。',a),
           k('serif','二本？',b),
@@ -1045,7 +1059,7 @@ function addCard(scene,type,at=scene.cards.length,base,text=''){
 function addSection(at=P().sections.length){
   const p=P(); const used=new Set(p.sections.map(s=>s.hue));
   const hue=(HUES.find(x=>!used.has(x[0]))||HUES[5])[0];
-  const s={id:rid('s'),title:'新しい区切り',hue,pages:0,temp:null,scenes:[newScene()]};
+  const s={id:rid('s'),title:'新しい区切り',hue,pages:0,scenes:[newScene()]};
   p.sections.splice(at,0,s); touch(); renderBoard(); updateStats();
   requestAnimationFrame(()=>{ const t=board.querySelector(`.sec[data-id="${s.id}"] .sec-title`); if(t){ t.focus(); t.select(); t.scrollIntoView({block:'nearest',inline:'nearest'}); } });
 }
@@ -1073,6 +1087,7 @@ function sceneMenu(anchor,sec,scene){
     h('hr'),
     h('button',{class:'item',onclick:()=>{ close(); scene.collapsed=!scene.collapsed; touch(); renderBoard(); }},scene.collapsed?'シーンを開く':'シーンをたたむ'),
     h('button',{class:'item',onclick:()=>{ close(); addScene(sec,i+1); }},'下にシーンを追加'),
+    scene.temp!=null?h('button',{class:'item',onclick:()=>{ close(); scene.temp=null; touch(); renderTemp(); }},'グラフの点を消す'):null,
     i>0?h('button',{class:'item',onclick:()=>{ close(); move(sec,i-1); }},'ひとつ上へ移動'):null,
     i<sec.scenes.length-1?h('button',{class:'item',onclick:()=>{ close(); move(sec,i+1); }},'ひとつ下へ移動'):null,
     si>0?h('button',{class:'item',onclick:()=>{ close(); move(p.sections[si-1]); }},`前の区切り「${p.sections[si-1].title||'名前なし'}」へ`):null,
@@ -1083,7 +1098,7 @@ function sceneMenu(anchor,sec,scene){
 }
 board.addEventListener('input',e=>{
   const t=e.target;
-  if(t.matches('.scene-title')){ const n=sceneOf(t); if(n){ n.title=t.value; touch(); } return; }
+  if(t.matches('.scene-title')){ const n=sceneOf(t); if(n){ n.title=t.value; touch(); tempSoon(); } return; }
   if(t.matches('.card textarea')){ const {card}=findCard(t.closest('.card').dataset.id); if(!card) return; card.text=t.value; autosize(t); touch(); if(card.fs) sideSoon(); }
   else if(t.matches('.sec-title')){ secOf(t).title=t.value; touch(); sideSoon(); tempSoon(); }
   else if(t.matches('.sec-pages input')){ secOf(t).pages=Math.max(0,Math.round(Number(t.value)||0)); touch(); updateStats(); }
@@ -1149,7 +1164,7 @@ function secMenu(anchor,s){
     idx<p.sections.length-1?h('button',{class:'item',onclick:()=>{ close(); p.sections.splice(idx,1); p.sections.splice(idx+1,0,s); touch(); renderBoard(); }},'ひとつ後ろへ移動'):null,
     h('button',{class:'item',onclick:()=>{ close(); addSection(idx+1); }},'うしろに区切りを追加'),
     h('button',{class:'item',onclick:()=>{ close(); addSection(idx); }},'まえに区切りを追加'),
-    s.temp!=null?h('button',{class:'item',onclick:()=>{ close(); s.temp=null; touch(); renderTemp(); }},'距離感を消す'):null,
+    s.scenes.some(n=>n.temp!=null)?h('button',{class:'item',onclick:()=>{ close(); s.scenes.forEach(n=>n.temp=null); touch(); renderTemp(); }},'この区切りのグラフの点を消す'):null,
     h('hr'),
     h('button',{class:'item danger',onclick:()=>{
       close(); p.sections.splice(idx,1); touch(); renderBoard(); updateStats();
@@ -1416,35 +1431,51 @@ $('#sideBtn').addEventListener('click',()=>{ sideOpen=!sideOpen; lsSet(LS_SIDE,s
 
 /* ---------- temperature graph ---------- */
 const tempWrap=$('#tempWrap');
-const LIVE_COL={line:'var(--k6)',grid:'var(--line)',text:'var(--ink-3)',label:'var(--ink-2)',val:'var(--ink)',empty:'var(--ink-3)',peak:'var(--k6)',bg:null};
-const EX_COL={line:'#C94E8A',grid:'#D5DBE5',text:'#8791A3',label:'#556074',val:'#1A2030',empty:'#B5BCC8',peak:'#C94E8A',bg:'#FFFFFF'};
+const LIVE_COL={line:'var(--k6)',grid:'var(--line)',text:'var(--ink-3)',label:'var(--ink-2)',val:'var(--ink)',empty:'var(--ink-3)',peak:'var(--k6)',bg:null,hue:h=>`var(--${h})`};
+const EX_COL={line:'#C94E8A',grid:'#D5DBE5',text:'#8791A3',label:'#556074',val:'#1A2030',empty:'#B5BCC8',peak:'#C94E8A',bg:'#FFFFFF',hue:h=>EXC[h]};
 function esc(t){ return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function tempGeom(n){ const step=Math.max(84,Math.min(170,860/Math.max(n,1))); const g={step,padL:46,padR:14,padT:24,padB:34,H:210}; g.W=g.padL+g.padR+step*Math.max(n,1); g.ph=g.H-g.padT-g.padB; return g; }
+function tempPoints(p){
+  const out=[];
+  p.sections.forEach(s=>s.scenes.forEach((n,j)=>out.push({sec:s,scene:n,label:n.title||(s.scenes.length>1?`${s.title||'？'}${j+1}`:'')})));
+  return out;
+}
+const fit=(t,n)=>t.length>n?t.slice(0,Math.max(1,n-1))+'…':t;
+function tempGeom(n){ const step=Math.max(68,Math.min(150,900/Math.max(n,1))); const g={step,padL:52,padR:14,padT:26,padB:58,H:240}; g.W=g.padL+g.padR+step*Math.max(n,1); g.ph=g.H-g.padT-g.padB; return g; }
 function tempMarkup(p,C,live){
-  const n=p.sections.length, g=tempGeom(n);
+  const pts=tempPoints(p), n=pts.length, g=tempGeom(n);
   const X=i=>g.padL+g.step*i+g.step/2, Y=v=>g.padT+(10-v)/10*g.ph;
-  const vals=p.sections.map(s=>s.temp); const max=Math.max(-1,...vals.filter(v=>v!=null));
+  const vals=pts.map(q=>q.scene.temp); const max=Math.max(-1,...vals.filter(v=>v!=null));
   const font='Zen Kaku Gothic New, Hiragino Kaku Gothic ProN, Yu Gothic, Meiryo, sans-serif';
-  let o=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${g.W} ${g.H}" width="${g.W}" height="${g.H}" font-family="${font}" role="img" aria-label="区切りごとの二人の距離感">`;
+  let o=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${g.W} ${g.H}" width="${g.W}" height="${g.H}" font-family="${font}" role="img" aria-label="${esc(p.tempTitle||'温度グラフ')}">`;
   if(C.bg) o+=`<rect width="${g.W}" height="${g.H}" style="fill:${C.bg}"/>`;
-  [[10,'近い'],[5,'5'],[0,'遠い']].forEach(([v,l])=>{
+  [[10,p.tempHigh||'10'],[5,'5'],[0,p.tempLow||'0']].forEach(([v,l])=>{
     o+=`<line x1="${g.padL}" x2="${g.W-g.padR}" y1="${Y(v)}" y2="${Y(v)}" style="stroke:${C.grid};stroke-width:1" ${v===5?'stroke-dasharray="3 4"':''}/>`;
-    o+=`<text x="${g.padL-8}" y="${Y(v)+4}" text-anchor="end" font-size="11" style="fill:${C.text}">${l}</text>`;
+    o+=`<text x="${g.padL-8}" y="${Y(v)+4}" text-anchor="end" font-size="11" style="fill:${C.text}">${esc(fit(String(l),4))}</text>`;
+  });
+  // 区切りの帯と名前、区切りの境目
+  let i0=0;
+  p.sections.forEach((s,si)=>{
+    const k=s.scenes.length; if(!k) return; const a=i0, b=i0+k-1; i0+=k;
+    const x1=X(a)-g.step/2+6, x2=X(b)+g.step/2-6, col=C.hue(s.hue);
+    if(si>0) o+=`<line x1="${X(a)-g.step/2}" x2="${X(a)-g.step/2}" y1="${g.padT-8}" y2="${g.padT+g.ph}" style="stroke:${C.grid};stroke-width:1" stroke-dasharray="2 4"/>`;
+    o+=`<line x1="${x1}" x2="${x2}" y1="${g.H-27}" y2="${g.H-27}" style="stroke:${col};stroke-width:3;stroke-linecap:round"/>`;
+    o+=`<text x="${(x1+x2)/2}" y="${g.H-9}" text-anchor="middle" font-size="12" font-weight="700" style="fill:${col}">${esc(fit(s.title||'（名前なし）',Math.floor((x2-x1)/12.5)))}</text>`;
   });
   for(let i=0;i<n-1;i++) if(vals[i]!=null&&vals[i+1]!=null)
     o+=`<line x1="${X(i)}" y1="${Y(vals[i])}" x2="${X(i+1)}" y2="${Y(vals[i+1])}" style="stroke:${C.line};stroke-width:3;stroke-linecap:round"/>`;
-  p.sections.forEach((s,i)=>{
-    const x=X(i), t=s.title||'（名前なし）', short=t.length>7?t.slice(0,7)+'…':t;
+  pts.forEach((q,i)=>{
+    const x=X(i), v=q.scene.temp, name=q.label||q.sec.title||'（名前なし）';
     if(live) o+=`<rect class="col" data-i="${i}" x="${x-g.step/2}" y="${g.padT-14}" width="${g.step}" height="${g.ph+28}" style="fill:transparent"/>`;
-    o+=`<text x="${x}" y="${g.H-10}" text-anchor="middle" font-size="12" font-weight="700" style="fill:${C.label}">${esc(short)}</text>`;
-    if(s.temp==null){
-      o+=`<g ${live?`class="pt" data-i="${i}" tabindex="0" role="slider" aria-label="${esc(t)}の距離感" aria-valuemin="0" aria-valuemax="10" aria-valuetext="未設定"`:''}><circle class="ring" cx="${x}" cy="${Y(0)}" r="9" style="fill:transparent;stroke:transparent"/><circle cx="${x}" cy="${Y(0)}" r="5" style="fill:none;stroke:${C.empty};stroke-width:1.5" stroke-dasharray="2 2"/></g>`;
+    if(q.label) o+=`<text x="${x}" y="${g.H-37}" text-anchor="middle" font-size="11" style="fill:${C.label}">${esc(fit(q.label,Math.floor((g.step-6)/11)))}</text>`;
+    const aria=live?`class="pt" data-i="${i}" tabindex="0" role="slider" aria-label="${esc(name)}" aria-valuemin="0" aria-valuemax="10" `:'';
+    if(v==null){
+      o+=`<g ${aria}${live?'aria-valuetext="未設定"':''}><circle class="ring" cx="${x}" cy="${Y(0)}" r="9" style="fill:transparent;stroke:transparent"/><circle cx="${x}" cy="${Y(0)}" r="5" style="fill:none;stroke:${C.empty};stroke-width:1.5" stroke-dasharray="2 2"/></g>`;
     }else{
-      const peak=s.temp===max&&max>0;
-      o+=`<g ${live?`class="pt" data-i="${i}" tabindex="0" role="slider" aria-label="${esc(t)}の距離感" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${s.temp}"`:''}>`+
-        `<circle class="ring" cx="${x}" cy="${Y(s.temp)}" r="${peak?11:9}" style="fill:transparent;stroke:${peak?C.peak:'transparent'};stroke-width:2;stroke-opacity:${peak?.45:0}"/>`+
-        `<circle cx="${x}" cy="${Y(s.temp)}" r="6" style="fill:${C.line}"/>`+
-        `<text x="${x}" y="${Y(s.temp)-14}" text-anchor="middle" font-size="12" font-weight="700" style="fill:${C.val}">${s.temp}</text></g>`;
+      const peak=v===max&&max>0;
+      o+=`<g ${aria}${live?`aria-valuenow="${v}"`:''}>`+
+        `<circle class="ring" cx="${x}" cy="${Y(v)}" r="${peak?11:9}" style="fill:transparent;stroke:${peak?C.peak:'transparent'};stroke-width:2;stroke-opacity:${peak?.45:0}"/>`+
+        `<circle cx="${x}" cy="${Y(v)}" r="6" style="fill:${C.line}"/>`+
+        `<text x="${x}" y="${Y(v)-14}" text-anchor="middle" font-size="12" font-weight="700" style="fill:${C.val}">${v}</text></g>`;
     }
   });
   return o+'</svg>';
@@ -1454,18 +1485,20 @@ function renderTemp(){
   const p=P(); $('#tempPanel').hidden=!showTemp; if(!showTemp||!p) return;
   const focusI=document.activeElement?.closest?.('.pt')?.dataset.i;
   tempWrap.innerHTML=tempMarkup(p,LIVE_COL,true);
-  const set=p.sections.filter(s=>s.temp!=null);
-  const max=Math.max(-1,...set.map(s=>s.temp));
-  $('#tempPeak').textContent=set.length?`いちばん近いのは「${p.sections.filter(s=>s.temp===max).map(s=>s.title||'？').join('」「')}」（${max}）`:'';
+  for(const [id,k] of [['#tempTitle','tempTitle'],['#tempHigh','tempHigh'],['#tempLow','tempLow']]){ const el=$(id); if(document.activeElement!==el) el.value=p[k]; }
+  const pts=tempPoints(p).filter(q=>q.scene.temp!=null);
+  const max=Math.max(-1,...pts.map(q=>q.scene.temp));
+  const hi=(p.tempHigh||'').trim(); const lead=/い$/.test(hi)?`いちばん${hi}のは`:'いちばん上は';
+  $('#tempPeak').textContent=pts.length?`${lead}「${pts.filter(q=>q.scene.temp===max).map(q=>q.label||q.sec.title||'？').join('」「')}」（${max}）`:'';
   if(focusI!=null) tempWrap.querySelector(`.pt[data-i="${focusI}"]`)?.focus();
 }
 let dragI=null;
 function tempFromEvent(e){
   const svg=tempWrap.querySelector('svg'); if(!svg||dragI==null) return;
   const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY;
-  const loc=pt.matrixTransform(svg.getScreenCTM().inverse()); const g=tempGeom(P().sections.length);
+  const pts=tempPoints(P()); const loc=pt.matrixTransform(svg.getScreenCTM().inverse()); const g=tempGeom(pts.length);
   const v=Math.max(0,Math.min(10,Math.round(10-(loc.y-g.padT)/g.ph*10)));
-  const s=P().sections[dragI]; if(s&&s.temp!==v){ s.temp=v; renderTemp(); }
+  const q=pts[dragI]; if(q&&q.scene.temp!==v){ q.scene.temp=v; renderTemp(); }
 }
 tempWrap.addEventListener('pointerdown',e=>{
   const t=e.target.closest('[data-i]'); if(!t) return;
@@ -1476,7 +1509,7 @@ tempWrap.addEventListener('pointermove',e=>{ if(dragI!=null) tempFromEvent(e); }
 const endDrag=()=>{ if(dragI!=null){ dragI=null; touch(); } };
 tempWrap.addEventListener('pointerup',endDrag); tempWrap.addEventListener('pointercancel',endDrag);
 tempWrap.addEventListener('keydown',e=>{
-  const g=e.target.closest('.pt'); if(!g) return; const s=P().sections[Number(g.dataset.i)]; if(!s) return;
+  const g=e.target.closest('.pt'); if(!g) return; const q=tempPoints(P())[Number(g.dataset.i)]; if(!q) return; const s=q.scene;
   let v=s.temp;
   if(e.key==='ArrowUp'||e.key==='ArrowRight') v=Math.min(10,(v??-1)+1);
   else if(e.key==='ArrowDown'||e.key==='ArrowLeft') v=v==null?0:Math.max(0,v-1);
@@ -1484,6 +1517,10 @@ tempWrap.addEventListener('keydown',e=>{
   else return;
   e.preventDefault(); s.temp=v; touch(); renderTemp();
 });
+for(const [id,k] of [['#tempTitle','tempTitle'],['#tempHigh','tempHigh'],['#tempLow','tempLow']]){
+  $(id).addEventListener('input',e=>{ P()[k]=e.target.value; touch(); if(k!=='tempTitle') tempSoon(); });
+  $(id).addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); e.target.blur(); } });
+}
 $('#tempBtn').addEventListener('click',()=>{ showTemp=!showTemp; lsSet(LS_TEMPV,showTemp); $('#tempBtn').setAttribute('aria-pressed',String(showTemp)); renderTemp(); });
 
 /* ---------- setting notes ---------- */
@@ -1764,7 +1801,7 @@ function buildStage(p,o){
     h('div',{class:'ex-h brk'},h('h1',null,p.title||'無題のプロット'),
       h('div',{class:'ex-meta'},`全${pages}P${p.target?'（目標'+p.target+'P）':''} ・ ${p.sections.length}区切り ・ セリフ${n.serif} モノローグ${n.mono}`,h('br'),`${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()} 書き出し`)),
     o.what!=='chars'?[o.what==='both'?h('div',{class:'ex-part brk'},'プロット'):null,
-      p.sections.some(s=>s.temp!=null)?h('div',{class:'ex-temp brk'},h('div',{class:'ex-cap'},'二人の距離感'),
+      o.temp!==false&&tempPoints(p).some(q=>q.scene.temp!=null)?h('div',{class:'ex-temp brk'},h('div',{class:'ex-cap'},p.tempTitle||'温度グラフ'),
         h('img',{src:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(tempMarkup(p,EX_COL,false)),alt:''})):null,
       o.shape==='board'?exPlotBoard(p):exPlotList(p), ...exExtras(p)]:null,
     o.what!=='plot'?[o.what==='both'?h('div',{class:'ex-part brk'},'キャラ・設定'):null, ...exChars(p), ...exNotes(p)]:null);
@@ -1819,13 +1856,19 @@ async function doExport(o,status){
   return {blob,name:base+'.pdf'};
 }
 function openExport(){
-  const o=Object.assign({what:'plot',shape:'list',fmt:'pdf'},lsGet(LS_EXP)||{});
+  const o=Object.assign({what:'plot',shape:'list',fmt:'pdf',temp:true},lsGet(LS_EXP)||{});
   const pills=(name,list)=>h('div',{class:'radio-pills',role:'radiogroup'},...list.map(([v,l])=>{
     const i=h('input',{type:'radio',name,value:v,checked:o[name]===v});
     i.addEventListener('change',()=>{ o[name]=v; lsSet(LS_EXP,o); sync(); });
     return h('label',null,i,h('span',null,l));
   }));
-  const shapeBox=h('div',null,h('p',{class:'group-title'},'プロットの見た目'),pills('shape',[['list','一覧（上から読む）'],['board','ボード（見たまま）']]));
+  const tempChk=h('input',{type:'checkbox',id:'expTemp',checked:o.temp!==false});
+  tempChk.addEventListener('change',()=>{ o.temp=tempChk.checked; lsSet(LS_EXP,o); });
+  const hasTemp=tempPoints(P()).some(q=>q.scene.temp!=null);
+  const shapeBox=h('div',{style:'display:flex;flex-direction:column;gap:10px'},
+    h('div',null,h('p',{class:'group-title'},'プロットの見た目'),pills('shape',[['list','一覧（上から読む）'],['board','ボード（見たまま）']])),
+    h('div',null,h('p',{class:'group-title'},'入れるもの'),h('div',{class:'opt-grid'},
+      h('label',null,tempChk,'温度グラフ'+(P().tempTitle?`（${P().tempTitle}）`:'')+(hasTemp?'':'　※まだ点を付けていません')))));
   const msg=h('p',{class:'hint',style:'margin:0'});
   const out=h('div',{style:'display:flex;flex-direction:column;gap:8px'});
   const sync=()=>{ shapeBox.hidden=o.what==='chars'; msg.textContent=o.fmt==='pdf'?'A4サイズで、カードの途中でページが切れないように分けます。':'1枚の長い画像になります。'; };
