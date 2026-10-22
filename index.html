@@ -197,6 +197,12 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .card-meta .who::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--kc,var(--line));flex:none}
 .card-meta .kind{white-space:nowrap}
 .bubble{cursor:grab}
+.card-tools{position:absolute;top:-13px;right:10px;z-index:2;display:flex;gap:1px;padding:1px;background:var(--sheet);border:1px solid var(--line);border-radius:8px;box-shadow:0 2px 8px rgba(18,28,48,.12);opacity:0;pointer-events:none;transition:opacity .12s}
+.card-tools .mini{opacity:1;width:26px;height:26px}
+.card:hover .card-tools,.card.editing .card-tools,.card:focus-within .card-tools,.card.menu-open .card-tools{opacity:1;pointer-events:auto}
+.card.dragging-card .card-tools{opacity:0}
+.spk-dot{position:absolute;left:-2px;top:-2px;z-index:1;width:11px;height:11px;border-radius:50%;background:var(--kc);border:2px solid var(--sheet);pointer-events:none}
+.card .bubble{position:relative}
 .card.editing .bubble{cursor:text;box-shadow:0 0 0 3px var(--blue-soft),0 0 0 4px var(--blue)}
 #themeBtn svg{width:18px;height:18px;display:block}
 .bubble .txt{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;min-height:1.65em;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -371,7 +377,10 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 @media (hover:none),(pointer:coarse){
   .mini{opacity:1;width:32px;height:32px;font-size:16px}
   .grip{width:32px;height:34px;font-size:14px}
-  .card-meta{font-size:12.5px;min-height:30px}
+  .card-tools{top:-18px}
+  .card-tools .mini{width:34px;height:34px;font-size:16px}
+  .card:hover .card-tools{opacity:0;pointer-events:none}
+  .card.editing .card-tools,.card.menu-open .card-tools{opacity:1;pointer-events:auto}
   .sec{width:330px;flex-basis:330px}
   .sec-menu{width:36px;height:36px}
   .add-chip{height:34px;padding:0 12px;font-size:13px}
@@ -890,14 +899,18 @@ function cardMeta(c){
   return h('button',{class:'card-meta','data-act':'meta','aria-label':'種類と話者を変える',title:'種類と話者を変える',style:ch?`--kc:var(--${ch.color})`:null},
     ch?h('span',{class:'who'},ch.name||'名前未設定'):null, h('span',{class:'kind'},TYPE_LABEL[c.type]));
 }
+function cardLabel(c){
+  const ch=(c.type==='serif'||c.type==='mono')?charById(c.speaker):null;
+  return (ch?(ch.name||'名前未設定')+' ・ ':'')+TYPE_LABEL[c.type];
+}
 function cardEl(c){
-  return h('article',{class:'card t-'+c.type,dataset:{id:c.id}},
-    h('div',{class:'card-bar'},
-      cardMeta(c),
-      h('span',{class:'sp'}),
-      h('button',{class:'mini','data-act':'cmenu','aria-label':'カードのメニュー',title:'追加・複製・伏線・削除'},'⋯'),
-      h('button',{class:'mini del hover-only','data-act':'del','aria-label':'削除',title:'削除'},'×')),
-    h('div',{class:'bubble','data-act':'edit',tabindex:0,role:'button','aria-label':TYPE_LABEL[c.type]+'を編集'},textView(c)),
+  const ch=(c.type==='serif'||c.type==='mono')?charById(c.speaker):null;
+  return h('article',{class:'card t-'+c.type,dataset:{id:c.id},title:cardLabel(c),style:ch?`--kc:var(--${ch.color})`:null},
+    h('div',{class:'bubble','data-act':'edit',tabindex:0,role:'button','aria-label':cardLabel(c)+'を編集'},textView(c)),
+    ch?h('span',{class:'spk-dot','aria-hidden':'true'}):null,
+    h('div',{class:'card-tools'},
+      h('button',{class:'mini','data-act':'cmenu','aria-label':'カードのメニュー',title:'種類・話者・複製・伏線'},'⋯'),
+      h('button',{class:'mini del','data-act':'del','aria-label':'削除',title:'削除'},'×')),
     fsTag(c));
 }
 function startEdit(el){
@@ -978,7 +991,7 @@ function renderBoard(){
   const anim=REDUCED?0:150;
   // カード全体をつかんで動かす。タッチは長押しで持ち上げる（そのまま動かすとスクロール）
   const opts={animation:anim,forceFallback:true,fallbackOnBody:true,delay:220,delayOnTouchOnly:true,touchStartThreshold:6,fallbackTolerance:3,scroll:true,scrollSensitivity:80,bubbleScroll:true,preventOnFilter:false,
-    onStart:()=>{ board.classList.add('dragging'); if(navigator.vibrate) try{ navigator.vibrate(12); }catch{} },
+    onStart:()=>{ popEl?.remove(); popEl=null; board.classList.add('dragging'); if(navigator.vibrate) try{ navigator.vibrate(12); }catch{} },
     onEnd:()=>{ board.classList.remove('dragging'); dragEndAt=Date.now(); syncFromDom(); }};
   sortables.push(Sortable.create(board,{...opts,handle:'.sec-head',draggable:'.sec',filter:'input,button,label'}));
   board.querySelectorAll('.scenes').forEach(el=>sortables.push(Sortable.create(el,{...opts,group:'scenes',handle:'.scene-head',draggable:'.scene',filter:'input,button',swapThreshold:.5})));
@@ -1075,6 +1088,7 @@ board.addEventListener('input',e=>{
   else if(t.matches('.sec-title')){ secOf(t).title=t.value; touch(); sideSoon(); tempSoon(); }
   else if(t.matches('.sec-pages input')){ secOf(t).pages=Math.max(0,Math.round(Number(t.value)||0)); touch(); updateStats(); }
 });
+board.addEventListener('mousedown',e=>{ if(e.target.closest('.card-tools')) e.preventDefault(); });
 board.addEventListener('focusout',e=>{
   if(e.target.matches('.card textarea')){ const el=e.target.closest('.card'); setTimeout(()=>{ if(!el.contains(document.activeElement)) endEdit(el); },0); }
 });
@@ -1254,13 +1268,26 @@ function viewImage(c,i){
 
 /* ---------- card menu & foreshadowing ---------- */
 function cardMenu(anchor,scene,idx,card){
-  popover(anchor,close=>[
+  const el=anchor.closest('.card'); el&&el.classList.add('menu-open');
+  const speaking=card.type==='serif'||card.type==='mono';
+  popover(anchor,close=>{ const set=fn=>()=>{ fn(); close(); touch(); rerenderCard(card.id); updateStats(); }; return [
+    h('div',{class:'label'},'種類'),
+    h('div',{class:'chips'},...TYPES.map(([k,l])=>h('button',{class:'chip'+(card.type===k?' on':''),onclick:set(()=>{
+      card.type=k;
+      if(k!=='serif'&&k!=='mono') card.speaker='';
+      else if(!card.speaker){ const f=findCard(card.id); card.speaker=guessSpeaker(f.scene,f.idx,k); }
+    })},l))),
+    speaking&&P().chars.length?[
+      h('div',{class:'label'},'話者'),
+      h('div',{class:'chips'},...P().chars.map(x=>h('button',{class:'chip spk'+(card.speaker===x.id?' on':''),style:`--kc:var(--${x.color})`,onclick:set(()=>{ card.speaker=x.id; })},x.name||'名前未設定')),
+        h('button',{class:'chip'+(!card.speaker?' on':''),onclick:set(()=>{ card.speaker=''; })},'なし'))]:null,
+    h('hr'),
     h('button',{class:'item',onclick:()=>{ close(); addCard(scene,card.type,idx+1); }},'下にカードを追加'),
     h('button',{class:'item',onclick:()=>{ close(); addCard(scene,card.type,idx+1,card); }},'複製'),
     h('button',{class:'item',onclick:()=>{ close(); fsMenu(anchor,card); }},card.fs?'伏線を変更…':'伏線を付ける…'),
     h('hr'),
     h('button',{class:'item danger',onclick:()=>{ close(); removeCard(scene,idx,card); }},'削除')
-  ]);
+  ]; });
 }
 function fsMenu(anchor,card){
   const p=P();
@@ -1498,7 +1525,7 @@ new ResizeObserver(()=>document.documentElement.style.setProperty('--barh',$('.a
 let popEl=null;
 function popover(anchor,build){
   popEl?.remove();
-  const close=()=>{ popEl?.remove(); popEl=null; document.removeEventListener('pointerdown',outside,true); document.removeEventListener('keydown',esc); };
+  const close=()=>{ popEl?.remove(); popEl=null; document.removeEventListener('pointerdown',outside,true); document.removeEventListener('keydown',esc); document.querySelectorAll('.card.menu-open').forEach(c=>c.classList.remove('menu-open')); };
   const outside=e=>{ if(popEl&&!popEl.contains(e.target)&&e.target!==anchor) close(); };
   const esc=e=>{ if(e.key==='Escape') close(); };
   popEl=h('div',{class:'pop',role:'menu'},build(close));
