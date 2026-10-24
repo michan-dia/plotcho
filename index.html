@@ -406,6 +406,8 @@ body.has-selbar main{padding-bottom:120px}
 .fs-opt{display:flex;align-items:center;gap:6px;padding:3px 10px}
 .fs-opt span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fs-opt .btn.on{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.fs-opt .fs-where{display:block;font-size:11px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis}
+.jump.other{border-style:dashed;color:var(--ink-2)}
 .card.flash .bubble{animation:flash 1.6s ease}
 @keyframes flash{0%,45%{box-shadow:0 0 0 4px var(--blue)}100%{box-shadow:0 0 0 0 transparent}}
 .badge{background:var(--red);color:var(--sheet);border-radius:999px;font-size:10.5px;padding:0 6px;font-weight:700;line-height:1.5}
@@ -540,6 +542,25 @@ body.has-selbar main{padding-bottom:120px}
 .ex-who .fs{display:block;font-size:10.5px;color:var(--ex-ink-2)}
 .ex-scene-h{font-size:13.5px;font-weight:700;margin:14px 0 4px;padding:2px 0 2px 10px;border-left:3px solid var(--hue);color:var(--ex-ink)}
 .ex-col .ex-scene-h{margin:6px 0 0}
+.ser-head{flex-basis:100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--ink-2);margin-bottom:-8px}
+.ser-head[hidden]{display:none}
+.ser-tag{font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:var(--blue-soft);color:var(--blue)}
+.ser-name{font:inherit;font-weight:700;font-size:14px;color:var(--ink);border:0;border-bottom:1px dashed var(--line);background:transparent;padding:1px 2px;width:10em;min-width:3em;max-width:100%}
+@supports (field-sizing:content){.ser-name{field-sizing:content;width:auto}}
+.ser-name:focus,.ep-num:focus{outline:none;border-color:var(--blue)}
+.ser-head .ep{display:inline-flex;align-items:center;gap:3px;font-weight:700;color:var(--ink)}
+.ep-num{font:inherit;width:3.4em;border:1px solid var(--line);border-radius:6px;background:var(--sheet);color:var(--ink);padding:1px 4px;text-align:center}
+.ser-head .eps{display:inline-flex;gap:4px;flex-wrap:wrap}
+.ser-head .eps button{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--sheet);color:var(--ink-2);border-radius:999px;padding:1px 9px;cursor:pointer}
+.ser-head .eps button[aria-current="true"]{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.ser-head .eps button.add{border-style:dashed}
+.ser-note{font-size:12.5px;color:var(--ink-2);margin:-6px 0 14px;line-height:1.6}
+.ser-note[hidden]{display:none}
+.ser-dlg{display:flex;flex-direction:column;gap:12px}
+.ser-dlg .in{font:inherit;width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--sheet);color:var(--ink)}
+.ser-dlg .in:disabled{opacity:.45}
+.ser-dlg .ep-row{display:flex;align-items:center;gap:6px;font-size:14px}
+.ser-dlg .ep-row .in{width:5em;text-align:center;padding:5px 6px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -575,6 +596,12 @@ body.has-selbar main{padding-bottom:120px}
 
   <section id="plotView">
     <div class="plot-head">
+      <div class="ser-head" id="serHead" hidden>
+        <span class="ser-tag">シリーズ</span>
+        <input class="ser-name" id="serName" aria-label="シリーズ名" placeholder="シリーズ名">
+        <label class="ep">第<input class="ep-num" id="epNum" type="number" min="0" inputmode="numeric" aria-label="何話">話</label>
+        <span class="eps" id="epList"></span>
+      </div>
       <label class="sr" for="projTitle">作品タイトル</label>
       <input class="title-in" id="projTitle" placeholder="作品タイトル">
       <div class="stats" id="stats"></div>
@@ -613,6 +640,7 @@ body.has-selbar main{padding-bottom:120px}
       <button class="btn sm" id="addCharBtn">＋ キャラを追加</button>
       <span class="hint">画像はドラッグ&ドロップでも追加できます</span>
     </div>
+    <p class="ser-note" id="serNote" hidden></p>
     <div class="chars" id="chars"></div>
     <div class="notes-wrap">
       <div class="char-head">
@@ -673,6 +701,7 @@ function byteSize(o){ return new Blob([JSON.stringify(o)]).size; }
 /* ================= data ================= */
 function normalize(p){
   p.title=String(p.title??'無題のプロット'); p.layout=p.layout==='rows'?'rows':'cols';
+  p.series=p.series?String(p.series):'';
   p.sections=Array.isArray(p.sections)?p.sections:[]; p.chars=Array.isArray(p.chars)?p.chars:[];
   p.target=Math.max(0,Math.round(Number(p.target)||0));
   p.foreshadows=(Array.isArray(p.foreshadows)?p.foreshadows:[]).filter(f=>f&&f.id).map(f=>({id:String(f.id),name:String(f.name??'')}));
@@ -682,7 +711,7 @@ function normalize(p){
   p.tempHigh=p.tempHigh==null?'近い':String(p.tempHigh);
   p.tempLow=p.tempLow==null?'遠い':String(p.tempLow);
   p.inbox=(Array.isArray(p.inbox)?p.inbox:[]).filter(Boolean).map(c=>({...c,id:c.id||rid('k'),type:TYPE_LABEL[c.type]?c.type:'memo',speaker:String(c.speaker||''),text:String(c.text??''),
-    fs:(c.fs&&fsIds.has(c.fs.id)&&(c.fs.role==='set'||c.fs.role==='pay'))?{id:c.fs.id,role:c.fs.role}:null,createdAt:Number(c.createdAt)||0}));
+    fs:(c.fs&&(p.series||fsIds.has(c.fs.id))&&(c.fs.role==='set'||c.fs.role==='pay'))?{id:String(c.fs.id),role:c.fs.role}:null,createdAt:Number(c.createdAt)||0}));
   p.notes=(Array.isArray(p.notes)?p.notes:[]).filter(Boolean).map(n=>({id:n.id||rid('n'),title:String(n.title??''),body:String(n.body??'')}));
   for(const s of p.sections){
     const oldTemp=clampT(s.temp); delete s.temp;
@@ -696,7 +725,7 @@ function normalize(p){
     if(oldTemp!=null&&s.scenes.every(n=>n.temp==null)) s.scenes.forEach(n=>n.temp=oldTemp);
     if(!s.scenes.length) s.scenes.push(newScene());
     for(const n of s.scenes) for(const c of n.cards){ c.id=c.id||rid('k'); c.type=TYPE_LABEL[c.type]?c.type:'serif'; c.speaker=String(c.speaker||''); c.text=String(c.text??'');
-      c.fs=(c.fs&&fsIds.has(c.fs.id)&&(c.fs.role==='set'||c.fs.role==='pay'))?{id:c.fs.id,role:c.fs.role}:null; }
+      c.fs=(c.fs&&(p.series||fsIds.has(c.fs.id))&&(c.fs.role==='set'||c.fs.role==='pay'))?{id:String(c.fs.id),role:c.fs.role}:null; }
   }
   for(const c of p.chars){
     c.id=c.id||rid('c'); c.name=String(c.name??''); c.color=KCOL.includes(c.color)?c.color:'k1';
@@ -704,10 +733,103 @@ function normalize(p){
     for(const [k] of [...FIELDS,...LONG]) c[k]=String(c[k]??'');
   }
   p.createdAt=Number(p.createdAt)||Date.now(); p.updatedAt=Number(p.updatedAt)||0; p.sample=!!p.sample;
+  p.series=p.series?String(p.series):''; p.seriesName=String(p.seriesName??'');
+  p.ep=p.series?(Number.isFinite(Number(p.ep))&&p.ep!==''&&p.ep!=null?Math.max(0,Math.round(Number(p.ep))):1):0;
   return p;
 }
 function newScene(title=''){ return {id:rid('m'),title,collapsed:false,temp:null,cards:[]}; }
 const allCards=s=>s.scenes.flatMap(n=>n.cards);
+
+/* ---------- シリーズ: 1話・2話…でキャラと作品の設定を共有する ----------
+   シリーズは作品とは別の記録(kind:'series')として保存・同期する。
+   シリーズの話は chars/notes にシリーズの配列そのものを持つので、どの話で直しても全話に反映される。 */
+let seriesMap={};
+const SHARED_FS=new WeakSet(); // シリーズの伏線一覧の配列(話の側が持っている一覧と区別する)
+function normSeries(x){
+  const t=normalize({sections:[],chars:x.chars,notes:x.notes,foreshadows:x.foreshadows});
+  x.kind='series'; x.id=String(x.id); x.name=String(x.name??''); x.chars=t.chars; x.notes=t.notes; x.foreshadows=t.foreshadows;
+  SHARED_FS.add(x.foreshadows);
+  x.createdAt=Number(x.createdAt)||Date.now(); x.updatedAt=Number(x.updatedAt)||0;
+  delete x.sections;
+  return x;
+}
+// 中身が変わったかを手早く見るための指紋(画像のような長い文字列は長さと末尾だけ見る)
+function sharedFp(S){ return JSON.stringify([S.name,S.chars,S.notes,S.foreshadows],(k,v)=>typeof v==='string'&&v.length>600?v.length+':'+v.slice(-80):v); }
+function SER(p){ p=p||projects[cur]; return p&&p.series?seriesMap[p.series]||null:null; }
+function episodes(sid){ return Object.values(projects).filter(p=>p.series===sid).sort((a,b)=>a.ep-b.ep||a.createdAt-b.createdAt); }
+function nextEp(S){ return Math.max(0,...episodes(S.id).map(p=>p.ep))+1; }
+function fullTitle(p){
+  if(!p.series) return p.title||'無題のプロット';
+  const S=seriesMap[p.series];
+  return `${(S&&S.name)||p.seriesName||'シリーズ'} 第${p.ep}話`+(p.title?` ${p.title}`:'');
+}
+function linkSeries(){
+  for(const p of Object.values(projects)){
+    if(!p.series) continue;
+    let S=seriesMap[p.series];
+    if(!S){ // シリーズの記録がまだ届いていないときの仮置き(同期で本物が来たら置き換わる)
+      S=seriesMap[p.series]=normSeries({id:p.series,name:p.seriesName,chars:clone(p.chars),notes:clone(p.notes),foreshadows:SHARED_FS.has(p.foreshadows)?[]:clone(p.foreshadows),createdAt:p.createdAt,updatedAt:0});
+      S.ph=true; S._fp=sharedFp(S);
+    }
+    // 話の側にだけある伏線(前の版で作ったもの)は、シリーズの一覧へ移す
+    else if(!SHARED_FS.has(p.foreshadows)) for(const f of p.foreshadows) if(!S.foreshadows.some(x=>x.id===f.id)) S.foreshadows.push(f);
+    p.chars=S.chars; p.notes=S.notes; p.foreshadows=S.foreshadows;
+  }
+}
+function checkSeries(){
+  for(const S of Object.values(seriesMap)){
+    const f=sharedFp(S); if(S._fp===f) continue;
+    S._fp=f; S.ph=false; S.updatedAt=Date.now(); dirty.add(S.id);
+  }
+}
+// 保存・同期するときの形。シリーズの話はキャラと設定をシリーズ側にだけ持つ
+function rec(p){
+  if(p.kind==='series'){ const o={...p}; delete o._fp; delete o.ph; return o; }
+  return p.series?{...p,chars:[],notes:[],foreshadows:[]}:p;
+}
+function recById(id){ return projects[id]||seriesMap[id]; }
+// 2台で同時に直したとき、片方にしかないキャラ・設定を足して、どちらも失わないようにする
+function mergeShared(base,other){
+  let n=0;
+  const ci=new Set(base.chars.map(c=>c.id)); (other.chars||[]).forEach(c=>{ if(!ci.has(c.id)){ base.chars.push(clone(c)); n++; } });
+  const ni=new Set(base.notes.map(x=>x.id)); (other.notes||[]).forEach(x=>{ if(!ni.has(x.id)){ base.notes.push(clone(x)); n++; } });
+  const fi=new Set(base.foreshadows.map(x=>x.id)); (other.foreshadows||[]).forEach(x=>{ if(x&&x.id&&!fi.has(x.id)){ base.foreshadows.push({id:String(x.id),name:String(x.name??'')}); n++; } });
+  return n;
+}
+function makeSeries(name,chars=[],notes=[],foreshadows=[]){
+  const S=normSeries({id:rid('q'),name,chars,notes,foreshadows,createdAt:Date.now(),updatedAt:Date.now()});
+  S._fp=sharedFp(S); seriesMap[S.id]=S; dirty.add(S.id); return S;
+}
+function dropSeriesIfEmpty(S){
+  if(!S||episodes(S.id).length) return;
+  delete seriesMap[S.id]; dirty.delete(S.id); IDB.del(S.id).catch(()=>{});
+  if(S.remoteId){ const t=lsGet(LS_TOMB)||{}; t[S.id]=Date.now(); lsSet(LS_TOMB,t); scheduleSync(); }
+}
+// 作品をシリーズに入れる。作品のキャラはシリーズのキャラにまとめる(同じ名前は1人にする)
+function joinSeries(p,S){
+  const remap={};
+  for(const c of p.chars){
+    const m=S.chars.find(x=>x.id===c.id)||(c.name.trim()?S.chars.find(x=>x.name.trim()===c.name.trim()):null);
+    if(m){ remap[c.id]=m.id; if(!m.images.length&&c.images.length) m.images=c.images; for(const [k] of [...FIELDS,...LONG]) if(!m[k]&&c[k]) m[k]=c[k]; }
+    else S.chars.push(c);
+  }
+  for(const n of p.notes) if(!S.notes.some(x=>x.id===n.id||(x.title===n.title&&x.body===n.body))) S.notes.push(n);
+  // 伏線も同じ名前のものは1つにまとめる
+  const fmap={};
+  for(const f of p.foreshadows){
+    const m=S.foreshadows.find(x=>x.id===f.id)||(f.name.trim()?S.foreshadows.find(x=>x.name.trim()===f.name.trim()):null);
+    if(m) fmap[f.id]=m.id; else S.foreshadows.push(f);
+  }
+  const fix=c=>{ if(remap[c.speaker]) c.speaker=remap[c.speaker]; if(c.fs&&fmap[c.fs.id]) c.fs.id=fmap[c.fs.id]; };
+  p.sections.forEach(s=>allCards(s).forEach(fix)); p.inbox.forEach(fix);
+  p.series=S.id; p.seriesName=S.name; p.chars=S.chars; p.notes=S.notes; p.foreshadows=S.foreshadows;
+}
+function leaveSeries(p){
+  const S=SER(p); const t=fullTitle(p);
+  p.chars=clone(p.chars); p.notes=clone(p.notes); p.foreshadows=clone(p.foreshadows);
+  p.title=t; p.series=''; p.seriesName=''; p.ep=0;
+  dropSeriesIfEmpty(S);
+}
 function blankProject(title='無題のプロット'){
   return normalize({id:rid('p'),title,layout:'cols',createdAt:Date.now(),chars:[],
     sections:[['起','s1'],['承','s2'],['転','s3'],['結','s4']].map(([t,hue])=>({id:rid('s'),title:t,hue,pages:0,cards:[]}))});
@@ -781,13 +903,18 @@ const IDB={
     r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); })); },
   async tx(mode,fn){ const d=await this.open(); return new Promise((res,rej)=>{ const t=d.transaction('projects',mode); const out=fn(t.objectStore('projects')); t.oncomplete=()=>res(out&&out.result!==undefined?out.result:undefined); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error); }); },
   all(){ return this.tx('readonly',st=>st.getAll()); },
-  put(list){ return this.tx('readwrite',st=>{ list.forEach(p=>st.put(clone(p))); }); },
+  put(list){ return this.tx('readwrite',st=>{ list.forEach(p=>st.put(clone(rec(p)))); }); },
   del(id){ return this.tx('readwrite',st=>{ st.delete(id); }); }
 };
 async function loadLocal(){
   let list=[];
   try{ list=await IDB.all()||[]; }catch(e){ console.warn(e); toast('この端末に保存できない設定になっています。プライベートブラウズを使っていないか確認してください。'); }
-  for(const p of list) if(p&&Array.isArray(p.sections)) projects[p.id]=normalize(p);
+  for(const p of list){
+    if(p&&p.kind==='series') seriesMap[p.id]=normSeries(p);
+    else if(p&&Array.isArray(p.sections)) projects[p.id]=normalize(p);
+  }
+  for(const S of Object.values(seriesMap)) S._fp=sharedFp(S);
+  linkSeries();
   if(!Object.keys(projects).length){ const s=sampleProject(); projects[s.id]=s; IDB.put([s]).catch(()=>{}); }
   const c=lsGet(LS_CUR); cur=projects[c]?c:firstId();
 }
@@ -804,11 +931,12 @@ function setStatus(s){
 }
 async function flush(){
   clearTimeout(saveTimer);
+  checkSeries();
   if(saving){ again=true; return; }
   saving=true; let failed=false;
   try{
     const ids=[...dirty]; dirty.clear();
-    const list=ids.map(id=>projects[id]).filter(Boolean);
+    const list=ids.map(recById).filter(Boolean);
     if(list.length){
       try{ await IDB.put(list); }
       catch(e){ ids.forEach(id=>dirty.add(id)); failed=true; console.warn(e);
@@ -823,7 +951,7 @@ async function flush(){
 
 /* ---------- Google Drive sync ---------- */
 const Drive=window.PlotDrive;
-let syncing=false, syncAgain=false, syncTimer=null, syncState='off', lastSync=0;
+let syncing=false, syncAgain=false, syncTimer=null, syncState='off', lastSync=0, lastSyncErr='';
 function syncOn(){ return !!(Drive&&Drive.enabled()); }
 function setSync(s,msg){
   syncState=s; const b=$('#syncBtn'); if(!b) return;
@@ -837,12 +965,12 @@ async function syncNow(interactive){
   if(!syncOn()) return;
   if(!Drive.hasToken()){
     if(!interactive){ setSync(Drive.everConnected()?'need':'off'); return; }
-    try{ await Drive.signIn(); }catch(e){ setSync(Drive.everConnected()?'need':'off'); toast(e.message||'ログインできませんでした'); return; }
+    try{ await Drive.signIn(); }catch(e){ setSync(Drive.everConnected()?'need':'off',e&&e.message); toast(e.message||'ログインできませんでした',{label:'もう一度',fn:()=>syncNow(true)}); return; }
   }
   if(syncing){ syncAgain=true; return; }
   syncing=true; clearTimeout(syncTimer); setSync('syncing');
   try{
-    await flush();
+    checkSeries(); await flush();
     const files=await Drive.list(); const remote={};
     for(const f of files){ const pid=(f.appProperties&&f.appProperties.pid)||f.name.replace(/^plotcho-|\.json$/g,''); if(pid) remote[pid]=f; }
     // deletions made on this device
@@ -852,7 +980,7 @@ async function syncNow(interactive){
     let changed=false; const save=[];
     for(const [pid,f] of Object.entries(remote)){
       const rUp=Number(f.appProperties&&f.appProperties.updatedAt)||Date.parse(f.modifiedTime)||0;
-      const lp=projects[pid];
+      const lp=recById(pid);
       const base=lp?(lp.syncedAt||0):0;
       const localChanged=!!lp&&(lp.updatedAt>base||dirty.has(pid));
       const remoteChanged=rUp>base;
@@ -860,26 +988,40 @@ async function syncNow(interactive){
       const takeRemote=!lp||(remoteChanged&&(!localChanged||rUp>lp.updatedAt));
       if(takeRemote&&!dirty.has(pid)){
         const data=await Drive.download(f.id);
+        if(data&&data.kind==='series'){
+          const S=normSeries({...data,id:pid}); S.remoteId=f.id; S.syncedAt=rUp; S.updatedAt=rUp;
+          // こちらでも直していたら、こちらにしかないキャラ・設定を足して送り直す
+          if(lp&&localChanged&&mergeShared(S,lp)){ S.updatedAt=Date.now(); syncAgain=true; }
+          S._fp=sharedFp(S); seriesMap[pid]=S; save.push(S); changed=true;
+          continue;
+        }
         if(!data||!Array.isArray(data.sections)) continue;
         const np=normalize({...data,id:pid}); np.updatedAt=rUp; np.remoteId=f.id; np.syncedAt=rUp;
         projects[pid]=np; save.push(np); changed=true;
       }else if(localChanged){
-        const at=lp.updatedAt; const r=await Drive.upload(lp,f.id); lp.remoteId=r.id; lp.syncedAt=at; save.push(lp);
+        if(lp.kind==='series'&&remoteChanged){ // 両方で直していたら、向こうにしかないものを足してから送る
+          const data=await Drive.download(f.id); if(data&&mergeShared(lp,data)){ lp._fp=sharedFp(lp); changed=true; }
+        }
+        const at=lp.updatedAt; const r=await Drive.upload(rec(lp),f.id); lp.remoteId=r.id; lp.syncedAt=at; save.push(lp);
       }else if(lp&&lp.remoteId!==f.id){ lp.remoteId=f.id; save.push(lp); }
     }
     const hasRemote=Object.keys(remote).length>0;
-    for(const lp of Object.values(projects)){
-      if(remote[lp.id]) continue;
+    for(const lp of [...Object.values(projects),...Object.values(seriesMap)]){
+      if(remote[lp.id]||lp.ph) continue;
       if(lp.sample&&!lp.updatedAt){ if(hasRemote){ delete projects[lp.id]; await IDB.del(lp.id); changed=true; } continue; }
-      if(lp.remoteId&&lp.syncedAt&&lp.updatedAt<=lp.syncedAt){ delete projects[lp.id]; await IDB.del(lp.id); changed=true; continue; } // deleted on another device
-      const at=lp.updatedAt; const r=await Drive.upload(lp,null); lp.remoteId=r.id; lp.syncedAt=at; save.push(lp);
+      if(lp.remoteId&&lp.syncedAt&&lp.updatedAt<=lp.syncedAt){ delete projects[lp.id]; delete seriesMap[lp.id]; await IDB.del(lp.id); changed=true; continue; } // deleted on another device
+      const at=lp.updatedAt; const r=await Drive.upload(rec(lp),null); lp.remoteId=r.id; lp.syncedAt=at; save.push(lp);
     }
     if(save.length) await IDB.put(save);
-    lastSync=Date.now(); setSync('ok');
-    if(changed){ if(!projects[cur]) cur=firstId(); safeRender(); }
+    lastSync=Date.now(); lastSyncErr=''; setSync('ok');
+    if(changed){ linkSeries(); if(!projects[cur]) cur=firstId(); safeRender(); }
   }catch(e){
     console.warn(e);
-    if(e&&e.auth) setSync('need'); else { setSync('error',e&&e.message); }
+    const msg=(e&&e.message)||'同期できませんでした';
+    if(e&&e.auth) setSync('need',msg); else setSync('error',msg);
+    // 理由を画面に出す(同じ理由は自動同期のたびには出さない)
+    if(interactive||msg!==lastSyncErr) toast(msg,{label:'もう一度',fn:()=>syncNow(true)});
+    lastSyncErr=msg;
   }finally{
     syncing=false;
     if(syncAgain){ syncAgain=false; syncNow(false); }
@@ -887,7 +1029,9 @@ async function syncNow(interactive){
 }
 function syncMenu(anchor){
   popover(anchor,close=>[
+    syncState==='error'&&lastSyncErr?h('div',{class:'label',style:'max-width:300px;white-space:normal;line-height:1.5;padding:6px 10px'},lastSyncErr):null,
     h('button',{class:'item',onclick:()=>{ close(); syncNow(true); }},Drive.hasToken()?'今すぐ同期':'つなぐ'),
+    h('button',{class:'item',onclick:async()=>{ close(); await Drive.signOut(); setSync('off'); syncNow(true); }},'ログインし直す'),
     Drive.hasToken()?h('button',{class:'item danger',onclick:()=>{ close(); Drive.signOut(); setSync('off'); toast('ドライブとの接続を切りました。データはこの端末に残っています'); }},'ドライブとの接続を切る'):null
   ]);
 }
@@ -905,6 +1049,7 @@ function renderAll(){
   $('#plotView').hidden=tab!=='plot'; $('#charView').hidden=tab!=='chars';
   $('#sampleBanner').hidden=!P().sample;
   const t=$('#projTitle'); if(document.activeElement!==t) t.value=P().title;
+  renderSeriesHead();
   $('#layCols').setAttribute('aria-pressed',String(P().layout==='cols'));
   $('#layRows').setAttribute('aria-pressed',String(P().layout==='rows'));
   $('#tempBtn').setAttribute('aria-pressed',String(showTemp));
@@ -912,9 +1057,26 @@ function renderAll(){
   renderBoard(); renderChars(); renderNotes(); renderTemp(); updateStats(); renderSide();
 }
 function renderProjSel(){
-  const sel=$('#projSel');
-  sel.replaceChildren(...Object.values(projects).sort((a,b)=>a.createdAt-b.createdAt)
-    .map(p=>h('option',{value:p.id,selected:p.id===cur},p.title||'無題のプロット')));
+  const sel=$('#projSel'); const all=Object.values(projects);
+  const opt=p=>h('option',{value:p.id,selected:p.id===cur},fullTitle(p));
+  const solo=all.filter(p=>!p.series).sort((a,b)=>a.createdAt-b.createdAt);
+  const groups=[...new Set(all.filter(p=>p.series).map(p=>p.series))].map(id=>episodes(id))
+    .sort((a,b)=>Math.min(...a.map(p=>p.createdAt))-Math.min(...b.map(p=>p.createdAt)));
+  sel.replaceChildren(...solo.map(opt),
+    ...groups.map(eps=>h('optgroup',{label:'シリーズ「'+((seriesMap[eps[0].series]||{}).name||'名前なし')+'」'},...eps.map(opt))));
+}
+function renderSeriesHead(){
+  const p=P(), S=SER(p);
+  $('#serHead').hidden=!S; $('#serNote').hidden=!S;
+  $('#projTitle').placeholder=S?'サブタイトル（なくてもOK）':'作品タイトル';
+  $('#projTitle').setAttribute('aria-label',S?'サブタイトル':'作品タイトル');
+  if(!S) return;
+  const sn=$('#serName'); if(document.activeElement!==sn) sn.value=S.name;
+  const en=$('#epNum'); if(document.activeElement!==en) en.value=String(p.ep);
+  const eps=episodes(S.id);
+  $('#epList').replaceChildren(...(eps.length>1?eps.map(e=>h('button',{type:'button','aria-current':String(e.id===p.id),title:fullTitle(e),onclick:()=>{ if(e.id===cur) return; selected.clear(); cur=e.id; lsSet(LS_CUR,cur); renderAll(); }},e.ep+'話')):[]),
+    h('button',{type:'button',class:'add',title:'次の話を作る（キャラ設定は引き継ぎます）',onclick:()=>newEpisode(S)},'＋ 次の話'));
+  $('#serNote').textContent=`キャラ・作品の設定・伏線は、シリーズ「${S.name||'名前なし'}」の全話（いま${eps.length}話）で共通です。どの話で直しても、ほかの話にも反映されます。`;
 }
 function updateStats(){
   const p=P(); const n={serif:0,mono:0,nare:0,memo:0}; let pages=0;
@@ -1415,7 +1577,8 @@ function renderChars(){
   charsEl.replaceChildren(...p.chars.map(charEl), h('button',{class:'add-char','data-act':'addchar'},'＋ キャラを追加'));
   if(window.Sortable) charSortable=Sortable.create(charsEl,{handle:'.char-grip',draggable:'.char',animation:REDUCED?0:150,onEnd:()=>{
     const m=Object.fromEntries(P().chars.map(c=>[c.id,c]));
-    P().chars=[...charsEl.querySelectorAll('.char')].map(el=>m[el.dataset.id]).filter(Boolean); touch(); renderBoard();
+    const order=[...charsEl.querySelectorAll('.char')].map(el=>m[el.dataset.id]).filter(Boolean);
+    if(order.length===P().chars.length) P().chars.splice(0,P().chars.length,...order); touch(); renderBoard();
   }});
 }
 const charOf=el=>P().chars.find(c=>c.id===el.closest('.char')?.dataset.id);
@@ -1527,9 +1690,12 @@ function fsMenu(anchor,card){
     const inp=h('input',{placeholder:'新しい伏線の名前','aria-label':'新しい伏線の名前'});
     const add=()=>{ const name=inp.value.trim(); if(!name){ inp.focus(); return; } const f={id:rid('f'),name}; p.foreshadows.push(f); card.fs={id:f.id,role:'set'}; done(); };
     inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); add(); } });
+    const stm=p.series?Object.fromEntries(fsStatus(p).map(x=>[x.f.id,x])):{};
+    const where=f=>{ const x=stm[f.id]; if(!x) return null; const a=x.sets.find(o=>o.p!==p), b=x.pays.find(o=>o.p!==p);
+      const t=[a?`${a.p.ep}話で張る`:null,b?`${b.p.ep}話で回収`:null].filter(Boolean).join('・'); return t?h('small',{class:'fs-where'},t):null; };
     return [
       h('div',{class:'label'},'このカードで伏線を'),
-      ...p.foreshadows.map(f=>h('div',{class:'fs-opt'},h('span',null,f.name||'名前なし'),
+      ...p.foreshadows.map(f=>h('div',{class:'fs-opt'},h('span',null,f.name||'名前なし',where(f)),
         h('button',{class:'btn sm'+(role(f,'set')?' on':''),onclick:()=>{ card.fs={id:f.id,role:'set'}; done(); }},'張る'),
         h('button',{class:'btn sm'+(role(f,'pay')?' on':''),onclick:()=>{ card.fs={id:f.id,role:'pay'}; done(); }},'回収'))),
       h('div',{class:'row'},inp,h('button',{class:'btn sm',onclick:add},'張る')),
@@ -1539,8 +1705,10 @@ function fsMenu(anchor,card){
   });
 }
 const FS_ST={done:['回収済み','ok'],open:['未回収','bad'],noset:['張っていない','warn'],early:['回収が先','warn'],none:['未使用','']};
+function fsScope(p){ return p.series?episodes(p.series):[p]; }
+// シリーズでは、全話を話の順に並べて「張る→回収」の順番を見る
 function fsStatus(p){
-  const order=[]; p.sections.forEach(s=>allCards(s).forEach(c=>order.push({s,c})));
+  const order=[]; fsScope(p).forEach(ep=>ep.sections.forEach(s=>allCards(s).forEach(c=>order.push({p:ep,s,c}))));
   return p.foreshadows.map(f=>{
     const sets=[],pays=[];
     order.forEach((o,idx)=>{ if(o.c.fs&&o.c.fs.id===f.id) (o.c.fs.role==='set'?sets:pays).push({...o,idx}); });
@@ -1657,10 +1825,12 @@ function sideNotes(p){
   if(!p.notes.length) return [h('p',{class:'hint',style:'margin:0'},'「キャラ・設定」タブの「作品の設定」に書いた内容が、ここに出ます。')];
   return p.notes.map(n=>h('div',{class:'sn'},h('h4',null,n.title||'（題名なし）'),h('p',null,n.body)));
 }
+function fsWhere(o,p){ return (p.series?`${o.p.ep}話 `:'')+(o.s.title||'?'); }
 function sideFs(p){
   const inp=h('input',{id:'fsNew',placeholder:'伏線の名前（例：首のあざ）','aria-label':'新しい伏線の名前'});
+  const S=SER(p);
   const list=fsStatus(p).map(({f,sets,pays,st})=>{
-    const link=o=>h('button',{class:'jump','data-jump':o.c.id,title:o.c.text},`${o.s.title||'?'}・${(o.c.text.trim()||'（空）').slice(0,14)}`);
+    const link=o=>h('button',{class:'jump'+(o.p!==p?' other':''),'data-jump':o.c.id,'data-jp':o.p.id,title:(p.series?fullTitle(o.p)+'\n':'')+o.c.text},`${fsWhere(o,p)}・${(o.c.text.trim()||'（空）').slice(0,14)}`);
     return h('div',{class:'fs-item'},
       h('div',{class:'fs-top'},h('input',{value:f.name,'data-fsname':f.id,'aria-label':'伏線の名前',placeholder:'名前なし'}),
         h('span',{class:'pill '+FS_ST[st][1]},FS_ST[st][0]),
@@ -1670,6 +1840,7 @@ function sideFs(p){
   });
   return [
     h('p',{class:'hint',style:'margin:0'},'カードの ⋯ から「伏線を付ける」で、張る場所と回収する場所を指定します。'),
+    S?h('p',{class:'hint',style:'margin:0'},`シリーズ「${S.name||'名前なし'}」の全話の伏線です。ほかの話で張った伏線も、この話で回収できます。ほかの話の場所を押すと、その話へ移ります。`):null,
     h('div',{class:'fs-add'},inp,h('button',{class:'btn sm','data-act':'fsadd'},'追加')),
     ...(list.length?list:[h('p',{class:'hint',style:'margin:0'},'まだ伏線がありません。')])];
 }
@@ -1695,13 +1866,19 @@ side.addEventListener('click',e=>{
   const t=e.target.closest('[data-stab],[data-act],[data-jump],[data-fsdel]'); if(!t) return;
   if(t.dataset.stab){ sideTab=t.dataset.stab; lsSet(LS_SIDETAB,sideTab); renderSide(); updateMemoBtn(); return; }
   if(t.dataset.act==='ideaadd') return addIdea();
-  if(t.dataset.jump){ if(innerWidth<=900){ sideOpen=false; lsSet(LS_SIDE,false); renderSide(); } jumpTo(t.dataset.jump); return; }
+  if(t.dataset.jump){
+    if(innerWidth<=900){ sideOpen=false; lsSet(LS_SIDE,false); renderSide(); }
+    const jp=t.dataset.jp;
+    if(jp&&jp!==cur&&projects[jp]){ selected.clear(); cur=jp; lsSet(LS_CUR,cur); renderAll(); toast(`${fullTitle(projects[jp])}へ移りました`); }
+    jumpTo(t.dataset.jump); return; }
   if(t.dataset.fsdel){
     const p=P(); const i=p.foreshadows.findIndex(f=>f.id===t.dataset.fsdel); if(i<0) return;
     const f=p.foreshadows[i]; const used=[];
-    p.sections.forEach(s=>allCards(s).forEach(c=>{ if(c.fs&&c.fs.id===f.id){ used.push([c,c.fs]); c.fs=null; } }));
+    fsScope(p).forEach(ep=>{ let hit=false;
+      ep.sections.forEach(s=>allCards(s).forEach(c=>{ if(c.fs&&c.fs.id===f.id){ used.push([c,c.fs,ep]); c.fs=null; hit=true; } }));
+      if(hit&&ep!==p) touch(ep); });
     p.foreshadows.splice(i,1); touch(); renderBoard();
-    lastUndo=()=>{ P().foreshadows.splice(i,0,f); used.forEach(([c,fs])=>c.fs=fs); touch(); renderBoard(); };
+    lastUndo=()=>{ p.foreshadows.splice(i,0,f); used.forEach(([c,fs,ep])=>{ c.fs=fs; touch(ep); }); touch(); renderBoard(); };
     toast(`伏線「${f.name||'名前なし'}」を削除しました`,{label:'元に戻す',fn:()=>lastUndo&&lastUndo()});
     return;
   }
@@ -2005,7 +2182,7 @@ function openText(){
       const fallback=()=>{ pre.focus(); pre.select(); toast('全体を選択しました。Ctrl+C（⌘+C）でコピーしてください'); };
       try{ navigator.clipboard.writeText(txt).then(()=>toast('コピーしました'),fallback); }catch{ fallback(); }
     }},
-    downloads?{label:'.txt で保存',primary:true,fn:()=>saveFile(safeName(p.title)+'_セリフ.txt',pre.value)}:null
+    downloads?{label:'.txt で保存',primary:true,fn:()=>saveFile(safeName(fullTitle(p))+'_セリフ.txt',pre.value)}:null
   ]});
 }
 const MIME={txt:'text/plain;charset=utf-8',json:'application/json',png:'image/png',pdf:'application/pdf'};
@@ -2060,11 +2237,12 @@ function exPlotBoard(p){
 }
 function exExtras(p){
   const out=[];
-  if(p.foreshadows.length){
-    out.push(h('div',{class:'ex-part brk'},'伏線'));
-    out.push(h('div',{class:'ex-fs'},...fsStatus(p).map(({f,sets,pays,st})=>h('div',{class:'ex-fs-row brk'},
+  const fl=fsStatus(p).filter(x=>!p.series||[...x.sets,...x.pays].some(o=>o.p===p));
+  if(fl.length){
+    out.push(h('div',{class:'ex-part brk'},p.series?'伏線（シリーズ全体での状態）':'伏線'));
+    out.push(h('div',{class:'ex-fs'},...fl.map(({f,sets,pays,st})=>h('div',{class:'ex-fs-row brk'},
       h('em',null,f.name||'名前なし'),h('span',{style:st==='open'?'color:#C8402F;font-weight:700':''},FS_ST[st][0]),
-      h('div',null,h('small',null,'張る：'+(sets.map(o=>o.s.title).join('、')||'—')),h('small',null,'回収：'+(pays.map(o=>o.s.title).join('、')||'—')))))));
+      h('div',null,h('small',null,'張る：'+(sets.map(o=>fsWhere(o,p)).join('、')||'—')),h('small',null,'回収：'+(pays.map(o=>fsWhere(o,p)).join('、')||'—')))))));
   }
   return out;
 }
@@ -2092,7 +2270,7 @@ function buildStage(p,o){
   const width=(o.what!=='chars'&&o.shape==='board')?Math.max(900,boardW):860;
   const d=new Date();
   const root=h('div',{class:'ex',style:`width:${width}px`},
-    h('div',{class:'ex-h brk'},h('h1',null,p.title||'無題のプロット'),
+    h('div',{class:'ex-h brk'},h('h1',null,fullTitle(p)),
       h('div',{class:'ex-meta'},`全${pages}P${p.target?'（目標'+p.target+'P）':''} ・ ${p.sections.length}区切り ・ セリフ${n.serif} モノローグ${n.mono}`,h('br'),`${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()} 書き出し`)),
     o.what!=='chars'?[o.what==='both'?h('div',{class:'ex-part brk'},'プロット'):null,
       o.temp!==false&&tempPoints(p).some(q=>q.scene.temp!=null)?h('div',{class:'ex-temp brk'},h('div',{class:'ex-cap'},p.tempTitle||'温度グラフ'),
@@ -2121,7 +2299,7 @@ async function doExport(o,status){
   const scale=Math.min(2,14000/Hh,14000/W);
   status('画像にしています…');
   const canvas=await html2canvas(root,{scale,backgroundColor:'#ffffff',useCORS:true,logging:false});
-  const base=safeName(p.title)+(o.what==='chars'?'_キャラ・設定':o.what==='both'?'_プロットとキャラ':'_プロット');
+  const base=safeName(fullTitle(p))+(o.what==='chars'?'_キャラ・設定':o.what==='both'?'_プロットとキャラ':'_プロット');
   if(o.fmt==='png'){
     const blob=await new Promise(r=>canvas.toBlob(r,'image/png'));
     $('#stage').replaceChildren();
@@ -2215,27 +2393,84 @@ $('#themeBtn').addEventListener('click',e=>popover(e.currentTarget,close=>themeI
 applyTheme();
 
 /* ================= projects menu & backup ================= */
+function newEpisode(S,from=P()){
+  const p=blankProject(''); p.series=S.id; p.seriesName=S.name; p.ep=nextEp(S);
+  if(from&&from.series===S.id){ p.layout=from.layout; p.target=from.target; p.tempTitle=from.tempTitle; p.tempHigh=from.tempHigh; p.tempLow=from.tempLow; }
+  p.chars=S.chars; p.notes=S.notes; p.foreshadows=S.foreshadows;
+  projects[p.id]=p; selected.clear(); cur=p.id; lsSet(LS_CUR,cur); tab='plot'; lsSet(LS_TAB,tab); touch(p); renderAll();
+  toast(`${fullTitle(p)}を作りました。キャラ・設定・伏線は引き継いでいます`);
+  requestAnimationFrame(()=>$('#projTitle').focus());
+}
+function openNewSeries(){
+  const name=h('input',{class:'in',placeholder:'シリーズ名（例：花と蜜）','aria-label':'シリーズ名'});
+  const go=c=>{ const S=makeSeries(name.value.trim()||'無題のシリーズ'); c(); newEpisode(S,null); };
+  name.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.isComposing){ e.preventDefault(); go(m.close); } });
+  const m=modal({title:'新しいシリーズ',body:[h('div',{class:'ser-dlg'},
+    h('p',{class:'hint',style:'margin:0'},'1話・2話…と、話ごとにプロットを分けて作れます。キャラ・作品の設定・伏線は全話で共通になります。'),name)],
+    actions:[{label:'やめる',fn:c=>c()},{label:'作る',primary:true,fn:go}]});
+}
+function openJoinSeries(p){
+  const list=Object.values(seriesMap).filter(S=>episodes(S.id).length).sort((a,b)=>a.createdAt-b.createdAt);
+  // 「花と蜜 第3話 ○○」のような題なら、シリーズ名・話数・サブタイトルに分けて使う
+  const tm=/^(.*?)\s*第\s*(\d+)\s*話\s*(.*)$/.exec(p.title);
+  let pick=(tm&&list.find(S=>S.name.trim()===tm[1].trim()))?.id||(tm?'new':(list.length?list[0].id:'new'));
+  const name=h('input',{class:'in',value:tm?tm[1].trim():(p.title==='無題のプロット'?'':p.title),placeholder:'シリーズ名（例：花と蜜）','aria-label':'新しいシリーズの名前'});
+  const ep=h('input',{class:'in',type:'number',min:0,inputmode:'numeric','aria-label':'何話'});
+  const sync=()=>{ name.disabled=pick!=='new'; ep.value=String(tm?Number(tm[2]):pick==='new'?1:nextEp(seriesMap[pick])); };
+  const pill=(v,label)=>{ const i=h('input',{type:'radio',name:'serpick',value:v,checked:pick===v}); i.addEventListener('change',()=>{ pick=v; sync(); }); return h('label',null,i,h('span',null,label)); };
+  sync();
+  modal({title:'シリーズに入れる',body:[h('div',{class:'ser-dlg'},
+    h('p',{class:'hint',style:'margin:0'},'シリーズに入れると、キャラ・作品の設定・伏線がほかの話と共通になります。この作品のキャラと伏線はシリーズのものにまとめます（同じ名前は1つにします）。'),
+    h('div',{class:'radio-pills',role:'radiogroup','aria-label':'入れるシリーズ'},...list.map(S=>pill(S.id,`${S.name||'名前なし'}（${episodes(S.id).length}話）`)),pill('new','新しいシリーズを作る')),
+    name,
+    h('label',{class:'ep-row'},'第',ep,'話として入れる'))],
+    actions:[{label:'やめる',fn:c=>c()},{label:'入れる',primary:true,fn:c=>{
+      const n=ep.value===''?1:Math.max(0,Math.round(Number(ep.value)||0));
+      if(pick==='new'){
+        const nm=name.value.trim()||(p.title!=='無題のプロット'&&p.title)||'無題のシリーズ';
+        const S=makeSeries(nm,p.chars,p.notes,p.foreshadows);
+        if(tm&&tm[1].trim()===nm) p.title=tm[3].trim();
+        else if(p.title===nm||p.title==='無題のプロット') p.title='';
+        p.series=S.id; p.seriesName=S.name; p.chars=S.chars; p.notes=S.notes; p.foreshadows=S.foreshadows;
+      }else{
+        const S=seriesMap[pick]; joinSeries(p,S);
+        if(tm&&tm[1].trim()===S.name.trim()) p.title=tm[3].trim();
+      }
+      p.ep=n; p.sample=false; touch(p); c(); renderAll(); toast(`「${fullTitle(p)}」にしました`);
+    }}]});
+}
 async function newProject(title){
   const p=blankProject(title); projects[p.id]=p; cur=p.id; lsSet(LS_CUR,cur); touch(p); renderAll();
   requestAnimationFrame(()=>{ const t=$('#projTitle'); tab='plot'; t.focus(); t.select(); });
 }
 $('#projMenuBtn').addEventListener('click',e=>{
-  const p=P();
+  const p=P(), S=SER(p);
   popover(e.currentTarget,close=>[
     h('button',{class:'item',onclick:()=>{ close(); flush().finally(()=>{ location.href='help.html'; }); }},'使いかた'),
     h('hr'),
     h('button',{class:'item',onclick:()=>{ close(); tab='plot'; newProject('無題のプロット'); }},'新しい作品'),
-    h('button',{class:'item',onclick:()=>{ close(); const c=normalize({...clone(p),id:rid('p'),title:p.title+'のコピー',createdAt:Date.now(),sample:false}); projects[c.id]=c; cur=c.id; touch(c); renderAll(); toast('複製しました'); }},'この作品を複製'),
+    h('button',{class:'item',onclick:()=>{ close(); openNewSeries(); }},'新しいシリーズ'),
+    S?h('button',{class:'item',onclick:()=>{ close(); newEpisode(S); }},`次の話を作る（第${nextEp(S)}話）`):null,
     h('hr'),
-    downloads?h('button',{class:'item',onclick:()=>{ close(); saveFile('プロット帖_バックアップ_'+today()+'.json',JSON.stringify({app:'plotcho',v:1,projects:Object.values(projects)},null,1)); }},'バックアップを保存（全作品）'):null,
+    h('button',{class:'item',onclick:()=>{ close(); const c=normalize({...clone(rec(p)),id:rid('p'),title:(p.title||'')+'のコピー',createdAt:Date.now(),sample:false,remoteId:null,syncedAt:0}); projects[c.id]=c; if(!c.series){ c.chars=clone(p.chars); c.notes=clone(p.notes); } linkSeries(); cur=c.id; touch(c); renderAll(); toast('複製しました'); }},'この作品を複製'),
+    S?h('button',{class:'item',onclick:async()=>{ close();
+        if(!await confirmBox('シリーズから外す',`「${fullTitle(p)}」をシリーズから外して、単独の作品にします。キャラと設定はその時点の内容を写して持っていきます（このあと直しても、ほかの話には反映されません）。`,'外す')) return;
+        leaveSeries(p); touch(p); renderAll(); toast('シリーズから外しました'); }},'シリーズから外す')
+      :h('button',{class:'item',onclick:()=>{ close(); openJoinSeries(p); }},'シリーズに入れる…'),
+    h('hr'),
+    downloads?h('button',{class:'item',onclick:()=>{ close(); saveFile('プロット帖_バックアップ_'+today()+'.json',JSON.stringify({app:'plotcho',v:1,projects:Object.values(projects),series:Object.values(seriesMap).filter(S=>!S.ph).map(rec)},null,1)); }},'バックアップを保存（全作品）'):null,
     h('button',{class:'item',onclick:()=>{ close(); $('#jsonInput').click(); }},'バックアップを読み込む'),
     h('hr'),
     ...themeItems(close),
     h('hr'),
     h('button',{class:'item danger',onclick:async()=>{
       close();
-      if(!await confirmBox('作品を削除',`「${p.title}」を削除します。プロットとキャラ設定がすべて消え、元に戻せません。`,'削除する')) return;
-      delete projects[p.id]; dirty.delete(p.id);
+      const last=S&&episodes(S.id).length===1;
+      const msg=!S?`「${fullTitle(p)}」を削除します。プロットとキャラ設定がすべて消え、元に戻せません。`
+        :last?`「${fullTitle(p)}」を削除します。シリーズ最後の話なので、シリーズのキャラ・設定・伏線も消えます。元に戻せません。`
+        :`「${fullTitle(p)}」のプロットを削除します。元に戻せません。キャラ・設定・伏線はシリーズに残ります。`;
+      if(!await confirmBox('作品を削除',msg,'削除する')) return;
+      delete projects[p.id]; dirty.delete(p.id); if(S) dropSeriesIfEmpty(S);
       IDB.del(p.id).catch(()=>{});
       if(p.remoteId){ const t=lsGet(LS_TOMB)||{}; t[p.id]=Date.now(); lsSet(LS_TOMB,t); scheduleSync(); }
       cur=firstId(); if(!cur){ const b=blankProject(); projects[b.id]=b; cur=b.id; touch(b); }
@@ -2247,19 +2482,37 @@ $('#jsonInput').addEventListener('change',async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f) return;
   try{
     const d=JSON.parse(await f.text()); const list=Array.isArray(d)?d:(d.projects||[]);
-    let n=0, lost=0;
+    let n=0, lost=0; const smap={}; const rser=Array.isArray(d.series)?d.series:[];
     for(const raw of list){ if(!raw||!Array.isArray(raw.sections)) continue;
-      const p=normalize({...clone(raw),id:rid('p'),sample:false,remoteId:null,syncedAt:0}); if(projects[raw.id]) p.title+='（読み込み）';
-      p.chars.forEach(c=>{ const before=c.images.length; c.images=c.images.filter(i=>i.d); if(c.images.length<before) lost++; });
+      const p=normalize({...clone(raw),id:rid('p'),sample:false,remoteId:null,syncedAt:0}); if(projects[raw.id]&&!p.series) p.title+='（読み込み）';
+      if(p.series){ // シリーズはまとめて1つの新しいシリーズとして読み込む
+        if(!smap[p.series]){
+          const rs=rser.find(x=>x&&x.id===raw.series);
+          const S=makeSeries(String((rs&&rs.name)||raw.seriesName||'シリーズ')+(seriesMap[raw.series]?'（読み込み）':''),rs?clone(rs.chars||[]):p.chars,rs?clone(rs.notes||[]):p.notes,rs?clone(rs.foreshadows||[]):p.foreshadows);
+          S.chars.forEach(c=>{ const before=c.images.length; c.images=c.images.filter(i=>i.d); if(c.images.length<before) lost++; });
+          smap[p.series]=S.id;
+        }
+        p.series=smap[p.series]; p.seriesName=seriesMap[p.series].name;
+      }else p.chars.forEach(c=>{ const before=c.images.length; c.images=c.images.filter(i=>i.d); if(c.images.length<before) lost++; });
       projects[p.id]=p; touch(p); cur=p.id; n++; }
-    if(!n) throw 0; renderAll(); toast(`${n}件の作品を読み込みました`+(lost?`（${lost}人分の画像は入っていませんでした）`:''));
+    if(!n) throw 0; linkSeries(); renderAll(); toast(`${n}件の作品を読み込みました`+(lost?`（${lost}人分の画像は入っていませんでした）`:''));
   }catch{ toast('このファイルは読み込めませんでした'); }
 });
 $('#projSel').addEventListener('change',e=>{ selected.clear(); cur=e.target.value; lsSet(LS_CUR,cur); renderAll(); });
 $('#projTitle').addEventListener('input',e=>{
   P().title=e.target.value; touch();
-  const o=$('#projSel').querySelector(`option[value="${cur}"]`); if(o) o.textContent=e.target.value||'無題のプロット';
+  const o=$('#projSel').querySelector(`option[value="${cur}"]`); if(o) o.textContent=fullTitle(P());
 });
+$('#serName').addEventListener('input',e=>{
+  const S=SER(); if(!S) return; S.name=e.target.value;
+  episodes(S.id).forEach(p=>p.seriesName=S.name); touch(); renderProjSel();
+  $('#serNote').textContent=$('#serNote').textContent.replace(/シリーズ「.*?」/,`シリーズ「${S.name||'名前なし'}」`);
+});
+$('#epNum').addEventListener('input',e=>{
+  if(!SER()||e.target.value==='') return;
+  P().ep=Math.max(0,Math.round(Number(e.target.value)||0)); touch(); renderProjSel();
+});
+$('#epNum').addEventListener('change',()=>renderSeriesHead());
 $('#tabPlot').addEventListener('click',()=>{ tab='plot'; lsSet(LS_TAB,tab); renderAll(); });
 $('#tabChars').addEventListener('click',()=>{ tab='chars'; lsSet(LS_TAB,tab); renderAll(); });
 $('#layCols').addEventListener('click',()=>{ P().layout='cols'; touch(); renderAll(); });
@@ -2277,22 +2530,44 @@ document.addEventListener('visibilitychange',()=>{
 $('#syncBtn').addEventListener('click',e=>{ if(syncState==='ok'||syncState==='error') syncMenu(e.currentTarget); else syncNow(true); });
 
 /* ================= app shell: offline & updates ================= */
+/* 新しい版は自動で切り替える。書いている途中なら、手が止まってから(または画面を離れたときに)切り替える */
+const SS_UPD='plotcho.updated';
+let updating=false, lastInput=Date.now();
+['pointerdown','keydown','wheel'].forEach(ev=>addEventListener(ev,()=>{ lastInput=Date.now(); },{capture:true,passive:true}));
+function applyUpdate(go){
+  if(updating) return; updating=true;
+  const tryNow=()=>{
+    const hidden=document.visibilityState==='hidden';
+    const busy=isEditing()||document.querySelector('.modal,.pop,.sortable-chosen,.sortable-fallback')||syncing||Date.now()-lastInput<20000;
+    if(busy&&!hidden){ setTimeout(tryNow,3000); return; }
+    flush().finally(()=>{ try{ sessionStorage.setItem(SS_UPD,'1'); }catch{} go(); });
+  };
+  tryNow();
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden'&&updating) flush(); });
+// PC版: 新しい版を取り込んだら、メイン側からここを呼ぶ
+window.__plotchoUpdateReady=()=>applyUpdate(()=>location.reload());
 if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1')){
   navigator.serviceWorker.register('sw.js').then(reg=>{
-    const offer=w=>toast('新しい版があります',{label:'切り替える',fn:()=>w.postMessage('skipWaiting')});
-    if(reg.waiting&&navigator.serviceWorker.controller) offer(reg.waiting);
+    const take=w=>applyUpdate(()=>w.postMessage('skipWaiting'));
+    if(reg.waiting&&navigator.serviceWorker.controller) take(reg.waiting);
     reg.addEventListener('updatefound',()=>{ const w=reg.installing; if(!w) return;
-      w.addEventListener('statechange',()=>{ if(w.state==='installed'&&navigator.serviceWorker.controller) offer(w); }); });
-    setInterval(()=>reg.update().catch(()=>{}),60*60*1000);
+      w.addEventListener('statechange',()=>{ if(w.state==='installed'&&navigator.serviceWorker.controller) take(w); }); });
+    setInterval(()=>reg.update().catch(()=>{}),30*60*1000);
+    document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') reg.update().catch(()=>{}); });
   }).catch(()=>{});
   let reloaded=false; const hadController=!!navigator.serviceWorker.controller;
   // 初めて開いたとき(まだ何も入っていないとき)は読み込み直さない。新しい版に切り替えたときだけ読み込み直す
-  navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(reloaded||!hadController) return; reloaded=true; flush().finally(()=>location.reload()); });
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(reloaded||!hadController) return; reloaded=true; flush().finally(()=>{ try{ sessionStorage.setItem(SS_UPD,'1'); }catch{} location.reload(); }); });
+}
+function updatedNotice(){
+  let f=null; try{ f=sessionStorage.getItem(SS_UPD); sessionStorage.removeItem(SS_UPD); }catch{}
+  if(f) setTimeout(()=>toast('新しい版になりました',{label:'変わったところ',fn:()=>{ flush().finally(()=>{ location.href='help.html#news'; }); }}),600);
 }
 
 /* ================= boot ================= */
 (async()=>{
-  await loadLocal(); renderAll(); setStatus('saved');
+  await loadLocal(); renderAll(); setStatus('saved'); updatedNotice();
   if(Drive&&Drive.init) await Drive.init();
   if(syncOn()){ setSync(Drive.hasToken()?'ok':(Drive.everConnected()?'need':'off')); if(Drive.hasToken()) syncNow(false); }
 })();

@@ -1,5 +1,5 @@
 /* プロット帖 — オフラインでも開けるようにするための仕組み */
-var VERSION = 'plotcho-v13';
+var VERSION = 'plotcho-v17';
 var FILES = [
   './',
   './index.html',
@@ -18,7 +18,8 @@ var FILES = [
 ];
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(FILES); }));
+  // ブラウザに残っている古いファイルではなく、必ず最新を取りに行く
+  e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(FILES.map(function (f) { return new Request(f, { cache: 'reload' }); })); }));
 });
 
 self.addEventListener('activate', function (e) {
