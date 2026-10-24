@@ -317,6 +317,10 @@ body.has-selbar main{padding-bottom:120px}
 .count b{color:var(--blue);font-size:16px}
 .group-title{font-size:12px;color:var(--ink-3);margin:0 0 4px;letter-spacing:.04em}
 .radio-pills{display:flex;flex-wrap:wrap;gap:6px}
+.mark-row{margin-top:6px;align-items:center}
+.mark-row[hidden]{display:none}
+.mark-in{width:4.5em;height:28px;border:1px solid var(--line);border-radius:6px;background:var(--sheet);color:var(--ink);padding:0 6px;font:inherit;text-align:center}
+.mark-in:disabled{opacity:.45}
 .radio-pills label{position:relative}
 .radio-pills input{position:absolute;opacity:0;pointer-events:none}
 .radio-pills span{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:5px 13px;font-size:13px;cursor:pointer;background:var(--sheet)}
@@ -2153,6 +2157,7 @@ function buildText(p,o){
       let t=c.text.replace(/\r\n?/g,'\n').replace(/\n(?:[ \t　]*\n)+/g,'\n').trim();
       if(!t) continue;
       if(o.names){ const ch=p.chars.find(x=>x.id===c.speaker); if(ch&&ch.name) t=ch.name+(c.type==='mono'?'（M）':'')+'：'+t; }
+      if(c.type==='memo'&&o.memoMark&&o.mark) t=o.mark+t; // ト書きはセリフと見分けられるよう、頭に印を付ける
       out.push(t);
     }
     }
@@ -2161,16 +2166,20 @@ function buildText(p,o){
 }
 function openText(){
   const p=P();
-  const o=Object.assign({types:['serif','mono','nare'],heads:false,names:false},lsGet(LS_TXT)||{});
+  const o=Object.assign({types:['serif','mono','nare'],heads:false,names:false,memoMark:true,mark:'※'},lsGet(LS_TXT)||{});
   const pre=h('textarea',{class:'big-ta prev-ta',id:'txtPrev',readonly:true,'aria-label':'書き出すテキスト'});
   const count=h('p',{class:'count',style:'margin:0'});
   const upd=()=>{ const blocks=buildText(p,o); pre.value=blocks.join('\n\n'); count.replaceChildren(h('b',null,blocks.length),' 個のテキストに分かれます'); lsSet(LS_TXT,o); };
   const chk=(label,get,set)=>{ const i=h('input',{type:'checkbox',checked:get()}); i.addEventListener('change',()=>{ set(i.checked); upd(); }); return h('label',null,i,label); };
-  const typeChk=([k,l])=>chk(l,()=>o.types.includes(k),v=>{ o.types=v?[...new Set([...o.types,k])]:o.types.filter(x=>x!==k); });
+  const typeChk=([k,l])=>chk(l,()=>o.types.includes(k),v=>{ o.types=v?[...new Set([...o.types,k])]:o.types.filter(x=>x!==k); markRow.hidden=!o.types.includes('memo'); });
+  const markIn=h('input',{class:'mark-in',value:o.mark,maxlength:6,'aria-label':'ト書きの頭に付ける印'});
+  markIn.addEventListener('input',()=>{ o.mark=markIn.value; upd(); });
+  const markRow=h('div',{class:'opt-grid mark-row'},chk('ト書き・メモの頭に印を付ける',()=>o.memoMark,v=>{ o.memoMark=v; markIn.disabled=!v; }),markIn);
+  markIn.disabled=!o.memoMark; markRow.hidden=!o.types.includes('memo');
   upd();
   modal({title:'クリスタ用テキスト',body:[
     h('p',{class:'hint',style:'margin:0'},'カードの順にテキストを並べ、カードごとに空行を1行はさみます。ストーリーエディターに貼り付けるか、テキストファイルとして保存してください。'),
-    h('div',null,h('p',{class:'group-title'},'含めるカード'),h('div',{class:'opt-grid'},...TYPES.map(typeChk))),
+    h('div',null,h('p',{class:'group-title'},'含めるカード'),h('div',{class:'opt-grid'},...TYPES.map(typeChk)),markRow),
     h('div',null,h('p',{class:'group-title'},'確認用（ストーリーエディターに入れるときは外す）'),h('div',{class:'opt-grid'},
       chk('区切り・シーンの見出しを入れる',()=>o.heads,v=>o.heads=v),
       chk('話者名を付ける',()=>o.names,v=>o.names=v))),
