@@ -151,6 +151,22 @@ body.has-selbar main{padding-bottom:120px}
 .tools .btn .cnt{font-size:11px;font-weight:700;color:var(--ink-3)}
 .tools .btn[aria-pressed="true"] .cnt{color:inherit}
 .board{display:flex;gap:14px;align-items:flex-start}
+/* 拡大・縮小: ボードをそのまま縮める(文字も一緒に小さくなる)。外枠の大きさはJSで合わせる */
+.board-zoom{position:relative}
+.board-zoom.on>.board{position:absolute;left:0;top:0;transform-origin:0 0}
+.board-scroll.zoomed{scroll-snap-type:none!important}
+/* 選択モードでは、1本指のドラッグは「囲んで選ぶ」に使う(2本指で動かす・拡大縮小) */
+.board-scroll.selecting{touch-action:none;scroll-snap-type:none!important}
+.marquee{position:fixed;z-index:45;pointer-events:none;border:1.5px solid var(--blue);background:rgba(42,102,201,.12);border-radius:4px}
+body.marqueeing{user-select:none;-webkit-user-select:none}
+body.marqueeing .board{cursor:crosshair}
+.board-scroll{touch-action:pan-x pan-y}
+.zoom{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px;background:var(--sheet);overflow:hidden}
+.zoom button{border:0;background:transparent;color:var(--ink);height:30px;min-width:30px;padding:0 6px;font:inherit;font-size:13px;cursor:pointer}
+.zoom button:hover{background:var(--sheet-2)}
+.zoom .z-val{min-width:52px;border-inline:1px solid var(--line);font-variant-numeric:tabular-nums}
+.zoom-hud{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(20,26,38,.82);color:#fff;font-size:15px;font-weight:700;padding:8px 14px;border-radius:10px;pointer-events:none;z-index:60;opacity:0;transition:opacity .25s}
+.zoom-hud.on{opacity:1;transition:none}
 .board.rows{flex-direction:column;align-items:stretch}
 .sec{background:var(--sheet);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;
   border-top:4px solid var(--hue,var(--s6));width:300px;flex:0 0 300px}
@@ -626,6 +642,7 @@ body.has-selbar main{padding-bottom:120px}
       <button class="btn sm" id="selBtn" aria-pressed="false">選択</button>
       <button class="btn sm" id="tempBtn" aria-pressed="true">温度グラフ</button>
       <button class="btn sm" id="sideBtn" aria-pressed="false">資料を横に出す <span class="badge" id="sideBadge" hidden></span></button>
+      <span class="zoom" role="group" aria-label="ボードの拡大・縮小"><button id="zoomOut" aria-label="縮小" title="縮小（Ctrl＋ホイール／ピンチ）">−</button><button class="z-val" id="zoomVal" aria-label="拡大率" title="押すとメニュー">100%</button><button id="zoomIn" aria-label="拡大" title="拡大（Ctrl＋ホイール／ピンチ）">＋</button></span>
       <span class="hint">カードをつかんで並べ替え ／ 押すと編集 ／ Enterを2回で次のカード</span>
     </div>
     <div class="temp" id="tempPanel">
@@ -633,7 +650,7 @@ body.has-selbar main{padding-bottom:120px}
       <div class="temp-scroll" id="tempWrap"></div>
     </div>
     <div class="plot-grid" id="plotGrid">
-      <div class="board-scroll"><div class="board" id="board"></div></div>
+      <div class="board-scroll"><div class="board-zoom" id="boardZoom"><div class="board" id="board"></div></div></div>
       <aside class="side" id="side" aria-label="資料" hidden></aside>
     </div>
   </section>
@@ -1218,7 +1235,8 @@ function renderBoard(){
   const opts=dragOpts();
   sortables.push(Sortable.create(board,{...opts,handle:'.sec-head',draggable:'.sec',filter:'input,button,label'}));
   board.querySelectorAll('.scenes').forEach(el=>sortables.push(Sortable.create(el,{...opts,group:'scenes',handle:'.scene-head',draggable:'.scene',filter:'input,button',swapThreshold:.5})));
-  board.querySelectorAll('.cards').forEach(el=>sortables.push(Sortable.create(el,{...opts,group:'cards',draggable:'.card',filter:'textarea,.mini,.fs-tag,.add-chip',swapThreshold:.6})));
+  const cardFilter=(e,item)=>!!(e.target.closest&&e.target.closest('textarea,.mini,.fs-tag,.add-chip'))||(selectMode&&!!item&&!item.classList.contains('selected'));
+  board.querySelectorAll('.cards').forEach(el=>sortables.push(Sortable.create(el,{...opts,group:'cards',draggable:'.card',filter:cardFilter,swapThreshold:.6})));
 }
 function dragOpts(){
   const anim=REDUCED?0:230;
@@ -1230,6 +1248,111 @@ function dragOpts(){
     onEnd:e=>{ autoScroll.stop(); board.classList.remove('dragging'); dragEndAt=Date.now(); multiEnd(e.item); syncFromDom(); }};
 }
 let dragEndAt=0;
+
+/* ---------- ボードの拡大・縮小(Ctrl＋ホイール、タッチパッドのピンチ、2本指ピンチ) ---------- */
+const LS_ZOOM='plotcho.zoom', LS_WZOOM='plotcho.wheelzoom';
+const ZMIN=.4, ZMAX=2;
+let zoom=(v=>v>=ZMIN&&v<=ZMAX?v:1)(Number(lsGet(LS_ZOOM))||1), wheelZoom=!!lsGet(LS_WZOOM);
+const boardScroll=()=>board.closest('.board-scroll');
+let hudEl=null, hudTimer=null;
+function zoomHud(){
+  if(!hudEl){ hudEl=h('div',{class:'zoom-hud','aria-hidden':'true'}); document.body.append(hudEl); }
+  hudEl.textContent=Math.round(zoom*100)+'%'; hudEl.classList.add('on');
+  clearTimeout(hudTimer); hudTimer=setTimeout(()=>hudEl.classList.remove('on'),500);
+}
+const zwrap=$('#boardZoom');
+// 縮めたボードが占める広さを、外枠に教える(スクロールできる範囲がずれないように)
+function sizeZoom(){
+  const on=zoom!==1, sc=boardScroll();
+  sc.classList.toggle('zoomed',on); zwrap.classList.toggle('on',on);
+  if(!on){ zwrap.style.width=zwrap.style.height=''; board.style.width=board.style.transform=''; return; }
+  const cs=getComputedStyle(sc), avail=sc.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight);
+  const w=board.classList.contains('rows')?Math.floor(avail/zoom)+'px':'max-content';
+  if(board.style.width!==w) board.style.width=w;
+  board.style.transform=`scale(${zoom})`;
+  const W=Math.ceil(board.offsetWidth*zoom)+'px', H=Math.ceil(board.offsetHeight*zoom)+'px';
+  if(zwrap.style.width!==W) zwrap.style.width=W;
+  if(zwrap.style.height!==H) zwrap.style.height=H;
+}
+if(window.ResizeObserver) new ResizeObserver(()=>sizeZoom()).observe(board);
+// ドラッグ中に指(マウス)の下に出る影も、ボードと同じ大きさに縮める
+new MutationObserver(list=>{
+  if(zoom===1) return;
+  for(const m of list) for(const g of m.addedNodes){
+    if(!(g instanceof HTMLElement)||!g.classList.contains('sortable-fallback')||g.dataset.zs) continue;
+    g.dataset.zs='1';
+    const w=parseFloat(g.style.width)||g.offsetWidth, hh=parseFloat(g.style.height)||g.offsetHeight;
+    const inner=g.cloneNode(true); inner.classList.remove('sortable-fallback'); inner.removeAttribute('data-zs');
+    inner.style.cssText=`position:absolute;left:0;top:0;margin:0;width:${w}px;height:${hh}px;transform:scale(${zoom});transform-origin:0 0;opacity:1`;
+    g.replaceChildren(inner);
+    g.style.width=w*zoom+'px'; g.style.height=hh*zoom+'px';
+    // 縮めたボードの中では、Sortableの置き場所の計算がずれるので、元のカードの見えている位置に合わせ直す
+    const src=window.Sortable&&Sortable.dragged; if(src){ const r=src.getBoundingClientRect(); g.style.left=r.left+'px'; g.style.top=r.top+'px'; }
+    g.style.setProperty('background','transparent','important'); g.style.setProperty('border','0','important');
+    g.style.setProperty('padding','0','important'); g.style.setProperty('box-shadow','none','important'); g.style.setProperty('outline','0','important');
+  }
+}).observe(document.body,{childList:true});
+addEventListener('resize',()=>sizeZoom());
+function applyZoom(){
+  sizeZoom();
+  const v=$('#zoomVal'); if(v) v.textContent=Math.round(zoom*100)+'%';
+}
+// (cx,cy) の画面上の位置にあるものが、拡大・縮小しても同じ場所に来るようにする
+function setZoom(z,cx,cy,hud=true){
+  z=Math.min(ZMAX,Math.max(ZMIN,Math.round(z*100)/100)); if(z===zoom) return;
+  const sc=boardScroll(), r=sc.getBoundingClientRect(), br=board.getBoundingClientRect();
+  if(cx==null){ cx=r.left+r.width/2; cy=Math.max(r.top,0)+Math.min(r.height,innerHeight)/2; }
+  const px=(sc.scrollLeft+cx-r.left)/zoom, py=(cy-br.top)/zoom;
+  zoom=z; applyZoom(); lsSet(LS_ZOOM,zoom);
+  sc.scrollLeft=px*zoom-(cx-r.left);
+  const nb=board.getBoundingClientRect(); window.scrollBy(0,(nb.top+py*zoom)-cy);
+  if(hud) zoomHud();
+}
+const zoomStep=d=>setZoom(zoom*(d>0?1.1:1/1.1));
+$('#zoomIn').addEventListener('click',()=>zoomStep(1));
+$('#zoomOut').addEventListener('click',()=>zoomStep(-1));
+$('#zoomVal').addEventListener('click',e=>popover(e.currentTarget,close=>[
+  h('div',{class:'label'},'ボードの大きさ'),
+  ...[.5,.75,1,1.25,1.5].map(z=>h('button',{class:'item'+(Math.abs(zoom-z)<.005?' on':''),onclick:()=>{ close(); setZoom(z); }},Math.round(z*100)+'%')),
+  h('hr'),
+  h('button',{class:'item'+(wheelZoom?' on':''),onclick:()=>{ close(); wheelZoom=!wheelZoom; lsSet(LS_WZOOM,wheelZoom); toast(wheelZoom?'ホイールだけで拡大・縮小します（Shift＋ホイールで横にスクロール）':'ホイールはスクロール、Ctrl＋ホイールで拡大・縮小に戻しました'); }},'ホイールだけで拡大・縮小する')
+]));
+// ホイール: Ctrl(Macは⌘)を押しながら回すと拡大・縮小。タッチパッドのピンチもこの形で届く
+document.addEventListener('wheel',e=>{
+  if(tab!=='plot'||!boardScroll().contains(e.target)) return;
+  // ふだんは Ctrl(⌘)＋ホイールだけ。「ホイールだけで拡大・縮小」がオンなら、Shiftなしのホイールも
+  if(!(e.ctrlKey||e.metaKey||(wheelZoom&&!e.shiftKey))) return;
+  e.preventDefault();
+  setZoom(zoom*Math.exp(-e.deltaY*(e.deltaMode===1?.05:.0018)),e.clientX,e.clientY);
+},{passive:false});
+// 2本指ピンチ(スマホ・タブレット)
+const pts=new Map(); let pinch=null;
+function pinchInfo(){ const [a,b]=[...pts.values()]; return {d:Math.hypot(a.x-b.x,a.y-b.y)||1,x:(a.x+b.x)/2,y:(a.y+b.y)/2}; }
+document.addEventListener('pointerdown',e=>{
+  if(e.pointerType!=='touch'||!boardScroll().contains(e.target)) return;
+  pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pts.size===2&&!(window.Sortable&&Sortable.active)){ const i=pinchInfo(); pinch={d0:i.d,z0:zoom,x:i.x,y:i.y}; }
+},true);
+document.addEventListener('pointermove',e=>{
+  if(!pts.has(e.pointerId)) return;
+  pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(!pinch||pts.size<2||pinch.raf) return;
+  // 2本の指の動きは別々に届くので、1コマ分まとめてから反映する(途中の半端な形で揺れないように)
+  pinch.raf=requestAnimationFrame(()=>{
+    if(!pinch) return; pinch.raf=0; if(pts.size<2) return;
+    const i=pinchInfo();
+    // 指の間の真ん中を動かすと、ボードも一緒に動く
+    boardScroll().scrollLeft-=i.x-pinch.x; window.scrollBy(0,-(i.y-pinch.y)); pinch.x=i.x; pinch.y=i.y;
+    const z=pinch.z0*i.d/pinch.d0;
+    if(Math.abs(z/zoom-1)>.015) setZoom(z,i.x,i.y);
+    dragEndAt=Date.now();
+  });
+},true);
+const ptUp=e=>{ if(!pts.delete(e.pointerId)) return; if(pinch){ dragEndAt=Date.now(); if(pts.size<2) pinch=null; } };
+document.addEventListener('pointerup',ptUp,true); document.addEventListener('pointercancel',ptUp,true);
+// iPhone・iPadのSafariは、ボードの上のピンチを画面全体の拡大にしない
+['gesturestart','gesturechange'].forEach(ev=>document.addEventListener(ev,e=>{ if(boardScroll().contains(e.target)) e.preventDefault(); },{passive:false}));
+applyZoom();
 
 /* ---------- ドラッグ中の自動スクロール(画面の端に近いほど速く。指を止めていても流れる) ---------- */
 const autoScroll=(()=>{
@@ -1293,7 +1416,7 @@ function multiEnd(item){
 }
 let selected=new Set(), selectMode=false, lastSel=null;
 function setSelectMode(on){
-  selectMode=on; $('#selBtn').setAttribute('aria-pressed',String(on)); board.classList.toggle('selecting',on);
+  selectMode=on; $('#selBtn').setAttribute('aria-pressed',String(on)); board.classList.toggle('selecting',on); board.closest('.board-scroll').classList.toggle('selecting',on);
   if(!on) clearSel(); else { document.activeElement?.blur?.(); renderSelBar(); }
 }
 function clearSel(){ selected.clear(); lastSel=null; board.querySelectorAll('.card.selected').forEach(e=>e.classList.remove('selected')); renderSelBar(); }
@@ -1343,12 +1466,83 @@ function renderSelBar(){
   if(!selbarEl){ selbarEl=h('div',{class:'selbar',role:'toolbar','aria-label':'選択したカード'}); document.body.append(selbarEl); }
   const n=selected.size;
   selbarEl.replaceChildren(
-    h('b',null,n?`${n}枚選択中`:'カードを押して選択'),
+    h('b',null,n?`${n}枚選択中`:(matchMedia('(pointer:coarse)').matches?'押すか、なぞって囲んで選択':'クリックか、ドラッグで囲んで選択')),
     n?h('button',{id:'selMove',onclick:e=>destMenu(e.currentTarget)},'移動…'):null,
     n?h('button',{onclick:selToNewScene},'新しいシーンに'):null,
     n?h('button',{class:'danger',onclick:deleteSel},'削除'):null,
     h('button',{class:'x','aria-label':'選択をやめる',title:'選択をやめる',onclick:()=>setSelectMode(false)},'×'));
 }
+/* ---------- 囲んで選ぶ(ドラッグで範囲選択) ----------
+   選択モード: カードの上でも空いているところでも、ドラッグで四角く囲んだカードを選ぶ(選んであるカードをつかむと移動)
+   PC: 選択モードでなくても、ボードの空いているところからマウスでドラッグすると囲んで選べる */
+let mq=null;
+function mqPoint(x,y){ const sc=boardScroll(), r=sc.getBoundingClientRect(); return {x:x-r.left+sc.scrollLeft, y:y+scrollY}; }
+function mqUpdate(){
+  if(!mq) return;
+  const sc=boardScroll(), r=sc.getBoundingClientRect(), c=mqPoint(mq.cx,mq.cy);
+  const x0=Math.min(mq.s.x,c.x), x1=Math.max(mq.s.x,c.x), y0=Math.min(mq.s.y,c.y), y1=Math.max(mq.s.y,c.y);
+  // 画面に出す四角(ボードの見えている範囲で切る)
+  const L=Math.max(x0-sc.scrollLeft+r.left,r.left), R=Math.min(x1-sc.scrollLeft+r.left,r.right);
+  Object.assign(mq.el.style,{left:L+'px',top:(y0-scrollY)+'px',width:Math.max(0,R-L)+'px',height:(y1-y0)+'px'});
+  const hit=new Set(mq.base);
+  board.querySelectorAll('.sec .card').forEach(el=>{
+    const b=el.getBoundingClientRect(), p=mqPoint(b.left,b.top), q=mqPoint(b.right,b.bottom);
+    if(p.x<x1&&q.x>x0&&p.y<y1&&q.y>y0) hit.add(el.dataset.id);
+  });
+  selected.clear(); hit.forEach(id=>selected.add(id));
+  board.querySelectorAll('.card').forEach(e=>e.classList.toggle('selected',selected.has(e.dataset.id)));
+  renderSelBar();
+}
+function mqTick(){
+  if(!mq||!mq.on) return;
+  // 端に寄ったら、そちらへスクロールしながら囲み続ける
+  const sc=boardScroll(), r=sc.getBoundingClientRect(), E=48, sp=d=>Math.ceil((E-d)/E*18);
+  let dx=0, dy=0;
+  if(mq.cx<r.left+E) dx=-sp(mq.cx-r.left); else if(mq.cx>r.right-E) dx=sp(r.right-mq.cx);
+  const top=Math.max(0,document.querySelector('.appbar')?.getBoundingClientRect().bottom||0);
+  if(mq.cy<top+E) dy=-sp(mq.cy-top); else if(mq.cy>innerHeight-E) dy=sp(innerHeight-mq.cy);
+  if(dx) sc.scrollLeft+=dx; if(dy) window.scrollBy(0,dy);
+  if(dx||dy) mqUpdate();
+  mq.raf=requestAnimationFrame(mqTick);
+}
+function mqEnd(cancel){
+  if(!mq) return;
+  cancelAnimationFrame(mq.raf); mq.el?.remove(); document.body.classList.remove('marqueeing');
+  if(mq.on){
+    dragEndAt=Date.now();
+    if(cancel){ selected.clear(); mq.base.forEach(id=>selected.add(id)); board.querySelectorAll('.card').forEach(e=>e.classList.toggle('selected',selected.has(e.dataset.id))); renderSelBar(); }
+    else{ const ids=flatIds().filter(id=>selected.has(id)); lastSel=ids[ids.length-1]||lastSel; }
+  }
+  mq=null;
+}
+document.addEventListener('pointerdown',e=>{
+  if(mq) mqEnd(true);
+  if(tab!=='plot'||e.button!==0||!board.contains(e.target)) return;
+  if(e.target.closest('.sec-head,.scene-head,button,input,textarea,select,label,.add-chip,.add-sec,.fs-tag,.card.editing')) return;
+  const onCard=e.target.closest('.card');
+  if(selectMode){ if(onCard&&onCard.classList.contains('selected')) return; }   // 選んであるカードは、つかんで移動
+  else if(onCard||e.pointerType!=='mouse') return;                              // ふだんは、PCで空いているところからだけ
+  const keep=selectMode||e.shiftKey||e.ctrlKey||e.metaKey;
+  mq={id:e.pointerId,sx:e.clientX,sy:e.clientY,cx:e.clientX,cy:e.clientY,s:mqPoint(e.clientX,e.clientY),base:keep?new Set(selected):new Set(),on:false,el:null,raf:0};
+},true);
+document.addEventListener('pointermove',e=>{
+  if(!mq||e.pointerId!==mq.id) return;
+  if(pts.size>1){ mqEnd(true); return; }   // 2本目の指が来たら、動かす・拡大縮小に切り替える
+  mq.cx=e.clientX; mq.cy=e.clientY;
+  if(!mq.on){
+    if(Math.hypot(mq.cx-mq.sx,mq.cy-mq.sy)<7) return;
+    if(window.Sortable&&Sortable.active){ mq=null; return; }
+    mq.on=true; document.activeElement?.blur?.(); popEl?.remove(); popEl=null;
+    mq.el=h('div',{class:'marquee','aria-hidden':'true'}); document.body.append(mq.el); document.body.classList.add('marqueeing'); try{ getSelection().removeAllRanges(); }catch{}
+    if(!mq.base.size){ selected.clear(); }
+    mq.raf=requestAnimationFrame(mqTick);
+  }
+  e.preventDefault(); mqUpdate();
+},true);
+document.addEventListener('pointerup',e=>{ if(mq&&e.pointerId===mq.id) mqEnd(false); },true);
+document.addEventListener('pointercancel',e=>{ if(mq&&e.pointerId===mq.id) mqEnd(!mq.on); },true);
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&mq) mqEnd(true); });
+
 function destMenu(anchor){
   popover(anchor,close=>[h('div',{class:'label'},'移動先(いちばん下に入ります)'),h('div',{class:'dest'},
     ...P().sections.flatMap(s=>[
