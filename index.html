@@ -435,6 +435,29 @@ body.marqueeing .board{cursor:crosshair}
 
 /* ---------- Setting notes ---------- */
 .notes-wrap{margin-top:30px}
+.rels-wrap{margin-top:30px}
+#saveRelBtn[hidden]{display:none}
+.rels{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:10px;margin-bottom:14px}
+.rels:empty{display:none}
+.rel{border:1px solid var(--line);border-radius:12px;background:var(--sheet);padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+.rel-top{display:flex;align-items:center;gap:6px}
+.rel-top select{flex:1;min-width:0;height:32px;border:1px solid var(--line);border-radius:7px;background:var(--sheet-2);color:var(--ink);padding:0 6px;font:inherit;font-weight:700}
+.rel-x{color:var(--ink-3);flex:none}
+.rel-top .mini{flex:none;opacity:1}
+.rel-l{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--ink-2)}
+.rel-l input{height:32px;border:1px solid var(--line);border-radius:7px;background:var(--sheet-2);color:var(--ink);padding:0 8px;font:inherit;font-size:14px;min-width:0}
+.relmap{border:1px solid var(--line);border-radius:14px;background:var(--sheet);padding:14px;overflow:auto}
+.relmap svg{display:block;margin:0 auto;height:auto}
+.relmap .empty{color:var(--ink-3);font-size:13px;text-align:center;padding:26px 8px}
+.relmap .rm-name{fill:var(--ink)}
+.relmap .rm-halo{stroke:var(--sheet);fill:var(--sheet)}
+.relmap .rm-bg{fill:var(--sheet-2)}
+.relmap .rm-node{cursor:grab}
+.relmap.dragging,.relmap.dragging .rm-node{cursor:grabbing}
+.relmap.dragging svg{user-select:none;-webkit-user-select:none}
+#relAutoBtn[hidden]{display:none}
+.ex-relmap{margin:4px 0 18px}
+.ex-relmap img{display:block;max-width:100%;height:auto;margin:0 auto}
 .notes{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:12px}
 .note{background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shadow)}
 .note-top{display:flex;gap:6px;align-items:center}
@@ -663,6 +686,17 @@ body.marqueeing .board{cursor:crosshair}
     </div>
     <p class="ser-note" id="serNote" hidden></p>
     <div class="chars" id="chars"></div>
+    <div class="rels-wrap">
+      <div class="char-head">
+        <h2>相関図</h2>
+        <button class="btn sm" id="addRelBtn">＋ 関係を追加</button>
+        <button class="btn sm" id="relAutoBtn" hidden title="手で動かした位置を消して、自動で並べ直します">自動で並べ直す</button>
+        <button class="btn sm" id="saveRelBtn">画像で保存</button>
+        <span class="hint">2人ずつ、おたがいから見た関係を書くと、自動で並べて図にします。アイコンはドラッグで動かせます</span>
+      </div>
+      <div class="rels" id="rels"></div>
+      <div class="relmap" id="relMap"></div>
+    </div>
     <div class="notes-wrap">
       <div class="char-head">
         <h2>作品の設定</h2>
@@ -734,6 +768,8 @@ function normalize(p){
   p.inbox=(Array.isArray(p.inbox)?p.inbox:[]).filter(Boolean).map(c=>({...c,id:c.id||rid('k'),type:TYPE_LABEL[c.type]?c.type:'memo',speaker:String(c.speaker||''),text:String(c.text??''),
     fs:(c.fs&&(p.series||fsIds.has(c.fs.id))&&(c.fs.role==='set'||c.fs.role==='pay'))?{id:String(c.fs.id),role:c.fs.role}:null,createdAt:Number(c.createdAt)||0}));
   p.notes=(Array.isArray(p.notes)?p.notes:[]).filter(Boolean).map(n=>({id:n.id||rid('n'),title:String(n.title??''),body:String(n.body??'')}));
+  // 相関図: a から見た b が ab、b から見た a が ba
+  p.rels=(Array.isArray(p.rels)?p.rels:[]).filter(r=>r&&r.a&&r.b).map(r=>({id:String(r.id||rid('r')),a:String(r.a),b:String(r.b),ab:String(r.ab??''),ba:String(r.ba??'')}));
   for(const s of p.sections){
     const oldTemp=clampT(s.temp); delete s.temp;
     s.id=s.id||rid('s'); s.title=String(s.title??''); s.pages=Math.max(0,Number(s.pages)||0);
@@ -751,6 +787,8 @@ function normalize(p){
   for(const c of p.chars){
     c.id=c.id||rid('c'); c.name=String(c.name??''); c.color=KCOL.includes(c.color)?c.color:'k1';
     c.images=Array.isArray(c.images)?c.images.filter(i=>i&&(i.a||i.d)):[];
+    // 相関図で手で動かした位置(なければ自動)
+    c.rp=(c.rp&&isFinite(c.rp.x)&&isFinite(c.rp.y))?{x:Math.round(Number(c.rp.x)),y:Math.round(Number(c.rp.y))}:null;
     for(const [k] of [...FIELDS,...LONG]) c[k]=String(c[k]??'');
   }
   p.createdAt=Number(p.createdAt)||Date.now(); p.updatedAt=Number(p.updatedAt)||0; p.sample=!!p.sample;
@@ -767,15 +805,15 @@ const allCards=s=>s.scenes.flatMap(n=>n.cards);
 let seriesMap={};
 const SHARED_FS=new WeakSet(); // シリーズの伏線一覧の配列(話の側が持っている一覧と区別する)
 function normSeries(x){
-  const t=normalize({sections:[],chars:x.chars,notes:x.notes,foreshadows:x.foreshadows});
-  x.kind='series'; x.id=String(x.id); x.name=String(x.name??''); x.chars=t.chars; x.notes=t.notes; x.foreshadows=t.foreshadows;
+  const t=normalize({sections:[],chars:x.chars,notes:x.notes,foreshadows:x.foreshadows,rels:x.rels});
+  x.kind='series'; x.id=String(x.id); x.name=String(x.name??''); x.chars=t.chars; x.notes=t.notes; x.foreshadows=t.foreshadows; x.rels=t.rels;
   SHARED_FS.add(x.foreshadows);
   x.createdAt=Number(x.createdAt)||Date.now(); x.updatedAt=Number(x.updatedAt)||0;
   delete x.sections;
   return x;
 }
 // 中身が変わったかを手早く見るための指紋(画像のような長い文字列は長さと末尾だけ見る)
-function sharedFp(S){ return JSON.stringify([S.name,S.chars,S.notes,S.foreshadows],(k,v)=>typeof v==='string'&&v.length>600?v.length+':'+v.slice(-80):v); }
+function sharedFp(S){ return JSON.stringify([S.name,S.chars,S.notes,S.foreshadows,S.rels],(k,v)=>typeof v==='string'&&v.length>600?v.length+':'+v.slice(-80):v); }
 function SER(p){ p=p||projects[cur]; return p&&p.series?seriesMap[p.series]||null:null; }
 function episodes(sid){ return Object.values(projects).filter(p=>p.series===sid).sort((a,b)=>a.ep-b.ep||a.createdAt-b.createdAt); }
 function nextEp(S){ return Math.max(0,...episodes(S.id).map(p=>p.ep))+1; }
@@ -789,12 +827,12 @@ function linkSeries(){
     if(!p.series) continue;
     let S=seriesMap[p.series];
     if(!S){ // シリーズの記録がまだ届いていないときの仮置き(同期で本物が来たら置き換わる)
-      S=seriesMap[p.series]=normSeries({id:p.series,name:p.seriesName,chars:clone(p.chars),notes:clone(p.notes),foreshadows:SHARED_FS.has(p.foreshadows)?[]:clone(p.foreshadows),createdAt:p.createdAt,updatedAt:0});
+      S=seriesMap[p.series]=normSeries({id:p.series,name:p.seriesName,chars:clone(p.chars),notes:clone(p.notes),foreshadows:SHARED_FS.has(p.foreshadows)?[]:clone(p.foreshadows),rels:clone(p.rels||[]),createdAt:p.createdAt,updatedAt:0});
       S.ph=true; S._fp=sharedFp(S);
     }
     // 話の側にだけある伏線(前の版で作ったもの)は、シリーズの一覧へ移す
     else if(!SHARED_FS.has(p.foreshadows)) for(const f of p.foreshadows) if(!S.foreshadows.some(x=>x.id===f.id)) S.foreshadows.push(f);
-    p.chars=S.chars; p.notes=S.notes; p.foreshadows=S.foreshadows;
+    p.chars=S.chars; p.notes=S.notes; p.foreshadows=S.foreshadows; p.rels=S.rels;
   }
 }
 function checkSeries(){
@@ -806,7 +844,7 @@ function checkSeries(){
 // 保存・同期するときの形。シリーズの話はキャラと設定をシリーズ側にだけ持つ
 function rec(p){
   if(p.kind==='series'){ const o={...p}; delete o._fp; delete o.ph; return o; }
-  return p.series?{...p,chars:[],notes:[],foreshadows:[]}:p;
+  return p.series?{...p,chars:[],notes:[],foreshadows:[],rels:[]}:p;
 }
 function recById(id){ return projects[id]||seriesMap[id]; }
 // 2台で同時に直したとき、片方にしかないキャラ・設定を足して、どちらも失わないようにする
@@ -814,11 +852,12 @@ function mergeShared(base,other){
   let n=0;
   const ci=new Set(base.chars.map(c=>c.id)); (other.chars||[]).forEach(c=>{ if(!ci.has(c.id)){ base.chars.push(clone(c)); n++; } });
   const ni=new Set(base.notes.map(x=>x.id)); (other.notes||[]).forEach(x=>{ if(!ni.has(x.id)){ base.notes.push(clone(x)); n++; } });
+  const ri=new Set(base.rels.map(x=>x.id)); (other.rels||[]).forEach(x=>{ if(x&&x.id&&!ri.has(x.id)){ base.rels.push(clone(x)); n++; } });
   const fi=new Set(base.foreshadows.map(x=>x.id)); (other.foreshadows||[]).forEach(x=>{ if(x&&x.id&&!fi.has(x.id)){ base.foreshadows.push({id:String(x.id),name:String(x.name??'')}); n++; } });
   return n;
 }
-function makeSeries(name,chars=[],notes=[],foreshadows=[]){
-  const S=normSeries({id:rid('q'),name,chars,notes,foreshadows,createdAt:Date.now(),updatedAt:Date.now()});
+function makeSeries(name,chars=[],notes=[],foreshadows=[],rels=[]){
+  const S=normSeries({id:rid('q'),name,chars,notes,foreshadows,rels,createdAt:Date.now(),updatedAt:Date.now()});
   S._fp=sharedFp(S); seriesMap[S.id]=S; dirty.add(S.id); return S;
 }
 function dropSeriesIfEmpty(S){
@@ -843,11 +882,13 @@ function joinSeries(p,S){
   }
   const fix=c=>{ if(remap[c.speaker]) c.speaker=remap[c.speaker]; if(c.fs&&fmap[c.fs.id]) c.fs.id=fmap[c.fs.id]; };
   p.sections.forEach(s=>allCards(s).forEach(fix)); p.inbox.forEach(fix);
-  p.series=S.id; p.seriesName=S.name; p.chars=S.chars; p.notes=S.notes; p.foreshadows=S.foreshadows;
+  for(const r of (p.rels||[])){ const a=remap[r.a]||r.a, b=remap[r.b]||r.b;
+    if(a!==b&&!S.rels.some(x=>(x.a===a&&x.b===b)||(x.a===b&&x.b===a))) S.rels.push({...r,a,b}); }
+  p.series=S.id; p.seriesName=S.name; p.chars=S.chars; p.notes=S.notes; p.foreshadows=S.foreshadows; p.rels=S.rels;
 }
 function leaveSeries(p){
   const S=SER(p); const t=fullTitle(p);
-  p.chars=clone(p.chars); p.notes=clone(p.notes); p.foreshadows=clone(p.foreshadows);
+  p.chars=clone(p.chars); p.notes=clone(p.notes); p.foreshadows=clone(p.foreshadows); p.rels=clone(p.rels);
   p.title=t; p.series=''; p.seriesName=''; p.ep=0;
   dropSeriesIfEmpty(S);
 }
@@ -855,53 +896,100 @@ function blankProject(title='無題のプロット'){
   return normalize({id:rid('p'),title,layout:'cols',createdAt:Date.now(),chars:[],
     sections:[['起','s1'],['承','s2'],['転','s3'],['結','s4']].map(([t,hue])=>({id:rid('s'),title:t,hue,pages:0,cards:[]}))});
 }
+// 前のサンプルがそのまま残っていたら、新しいサンプルに置き換える
+const OLD_SAMPLES=['雨宿りの花屋（サンプル）','ブラックは苦手です（サンプル）','推しが隣に越してきた（サンプル）'];
+const SAMPLE_REV=2;   // サンプルを書き直したら上げる(同じ題名の古いサンプルも置き換わる)
+function upgradeSample(){
+  let n=0;
+  for(const p of Object.values(projects)){
+    const old=OLD_SAMPLES.includes(p.title)||(p.title==='傘、返します（サンプル）'&&(Number(p.sampleRev)||0)<SAMPLE_REV);
+    if(!p.sample||p.series||!old) continue;
+    const np=sampleProject(); np.id=p.id; np.createdAt=p.createdAt; np.remoteId=p.remoteId; np.syncedAt=p.syncedAt;
+    projects[p.id]=np; touch(np); n++;
+  }
+  return n;
+}
 function sampleProject(){
-  const a=rid('c'),b=rid('c');
+  const mi=rid('c'), to=rid('c');
   const k=(type,text,speaker='',fs=null)=>({id:rid('k'),type,speaker,text,fs});
   const sc=(title,temp,...cards)=>({id:rid('m'),title,temp,cards});
   const f1=rid('f'),f2=rid('f');
-  return normalize({id:rid('p'),title:'雨宿りの花屋（サンプル）',sample:true,layout:'cols',createdAt:Date.now(),target:32,
-    foreshadows:[{id:f1,name:'買った花の行方'},{id:f2,name:'金曜の花言葉'}],
-    notes:[{id:rid('n'),title:'舞台',body:'駅前商店街のはずれ。花屋「あさひな生花店」と、久世の勤める工務店が通りをはさんで向かい合っている。'},
-           {id:rid('n'),title:'金曜の花',body:'久世が毎週買う花は毎回ちがう。花言葉を順に並べると告白になっている、という仕掛けにするか検討中。'}],
+  return normalize({id:rid('p'),title:'傘、返します（サンプル）',sample:true,sampleRev:SAMPLE_REV,layout:'cols',createdAt:Date.now(),target:24,
+    tempTitle:'二人の距離感',tempHigh:'近い',tempLow:'遠い',
+    foreshadows:[{id:f1,name:'傘の名前シール'},{id:f2,name:'いつも傘を持っていない'}],
+    notes:[
+      {id:rid('n'),title:'舞台',body:'駅前の小さな本屋「しおり堂」。湊はここでアルバイトをしている。'},
+      {id:rid('n'),title:'傘',body:'湊のビニール傘には、子どものころの癖で「みなと」と書いた名前シールが貼ってある。'}
+    ],
     chars:[
-      {id:a,name:'久世 蓮司',kana:'くぜ れんじ',role:'攻め',age:'29',height:'186cm',first:'俺',call:'あんた',color:'k1',
-       personality:'無口で不器用。一度決めたことは曲げない。',look:'黒髪の短髪。長身で肩幅が広く、手が大きい。作業着姿が多い。',
-       bg:'花屋の向かいにある工務店の大工。毎週金曜の閉店間際に、花を一本だけ買っていく。',memo:'',images:[]},
-      {id:b,name:'朝比奈 湊',kana:'あさひな みなと',role:'受け',age:'26',height:'168cm',first:'僕',call:'久世さん',color:'k2',
-       personality:'人当たりがよく世話焼き。自分のことは後回しにしがち。',look:'色素の薄い柔らかい髪。生成りのエプロン。',
-       bg:'祖母から継いだ「あさひな生花店」を一人で切り盛りしている。',memo:'',images:[]}
+      {id:to,name:'真木 透',kana:'まき とおる',role:'攻め',age:'28',height:'182cm',first:'俺',call:'店員さん → 湊',color:'k1',
+       personality:'無愛想に見えるが、律儀で照れ屋。好きになると隠すのが下手。',look:'黒髪。いつもスーツ。笑うと目尻が下がる。',
+       bg:'本屋の近くの会社に勤める会社員。本はあまり読まない。',memo:'',images:[]},
+      {id:mi,name:'佐倉 湊',kana:'さくら みなと',role:'受け',age:'24',height:'168cm',first:'僕',call:'真木さん → 透さん',color:'k2',
+       personality:'おっとりしていて、本の話になると止まらない。自分の気持ちには鈍い。',look:'やわらかい髪。本屋のエプロン。',
+       bg:'駅前の本屋「しおり堂」の店員。',memo:'',images:[]}
+    ],
+    rels:[
+      {id:rid('r'),a:to,b:mi,ab:'ひと目ぼれの相手',ba:'傘を忘れる常連さん'}
     ],
     sections:[
       {id:rid('s'),title:'起',hue:'s1',pages:6,scenes:[
-        sc('金曜、閉店間際の花屋',1,
-          k('nare','駅前商店街のはずれにある、小さな花屋。'),
-          k('memo','金曜、閉店間際。外は雨。'),
-          k('serif','いらっしゃいませ。今日も一本ですか？',b),
-          k('serif','……ああ。',a)),
-        sc('湊の気がかり',2,
-          k('mono','毎週同じ時間に来て、毎回ちがう花を一本だけ。\n誰に渡してるんだろう。',b,{id:f1,role:'set'}))]},
-      {id:rid('s'),title:'承',hue:'s2',pages:8,scenes:[
-        sc('雨宿り',4,
-          k('memo','雨が強くなり、久世は店先で雨宿りすることに。'),
-          k('serif','よかったら中で待っててください。お茶いれますから。',b),
-          k('serif','……悪い。',a),
-          k('mono','近くで見ると、思っていたより手が大きい。',b)),
-        sc('花言葉の話',5,
-          k('memo','湊、祖母に教わった花言葉の話をする。久世は黙って聞いている。','',{id:f2,role:'set'}))]},
-      {id:rid('s'),title:'転',hue:'s3',pages:10,scenes:[
-        sc('向かいの窓辺',6,
-          k('memo','閉店後、湊は向かいの工務店の窓辺に、自分が売った花がずらりと並んでいるのを見つける。','',{id:f1,role:'pay'})),
-        sc('告白',9,
-          k('serif','これ、全部……誰かに渡してたんじゃないんですか？',b),
-          k('serif','渡せなかった。\n……あんたに渡したかったんだ。',a))]},
-      {id:rid('s'),title:'結',hue:'s4',pages:8,scenes:[
-        sc('最初の金曜日',10,
-          k('memo','付き合いはじめて最初の金曜日。'),
-          k('serif','今日は二本くれ。',a),
-          k('serif','二本？',b),
-          k('serif','一本はあんたの分だ。',a),
-          k('mono','この人、こんなふうに笑うんだ。',b))]}
+        sc('雨の夕方',2,
+          k('nare','駅前の小さな本屋「しおり堂」。'),
+          k('memo','夕方、急な雨。店の軒先で、スーツの男が空を見上げている。'),
+          k('serif','よかったら、これ使ってください。',mi),
+          k('serif','……いや、悪いので。',to),
+          k('serif','返さなくていいですから。風邪ひいちゃいますよ。',mi),
+          k('memo','傘を渡すとき、指先がふれる。湊の手は、雨で少し冷たい。'),
+          k('mono','笑った顔が、雨の中でそこだけ明るかった。',to),
+          k('memo','透が受け取った傘の柄に、「みなと」と書いた名前シール。','',{id:f1,role:'set'})),
+        sc('返しにきた',3,
+          k('memo','翌日、透は傘を返しに来る。でも湊は休み。その次の日も、すれちがい。'),
+          k('mono','返さなくていいって言われたのに。……もう一度、あの顔が見たいだけだ。',to))]},
+      {id:rid('s'),title:'承',hue:'s2',pages:6,scenes:[
+        sc('三度目の正直',4,
+          k('serif','あ、あのときの！',mi),
+          k('serif','……傘、返します。ありがとう。',to),
+          k('serif','わざわざ、何回も来てくれたって聞きました。',mi),
+          k('serif','……会えるまで、来るつもりだったので。',to),
+          k('mono','え。……いま、すごいこと言われた気がする。',mi)),
+        sc('毎週の一冊',6,
+          k('memo','それから透は、毎週一冊ずつ本を買いに来るようになる。'),
+          k('serif','この前の本、どうでした？',mi),
+          k('serif','まだ半分。……でも、どこが好きか、ここで話したくて読んでる。',to),
+          k('memo','晴れた日も雨の日も、透はいつも傘を持っていない。','',{id:f2,role:'set'}),
+          k('mono','金曜の夕方が、一週間でいちばん待ち遠しい。',mi)),
+        sc('相合傘',7,
+          k('memo','閉店後、また雨。駅まで一本の傘に二人で入る。'),
+          k('serif','肩、濡れてますよ。もっとこっち。',mi),
+          k('memo','透が傘を湊のほうへ傾け、自分の肩はびしょ濡れ。'),
+          k('serif','……いい。こっちのほうが、近いから。',to),
+          k('mono','心臓の音、雨でかき消されてますように。',mi))]},
+      {id:rid('s'),title:'転',hue:'s3',pages:6,scenes:[
+        sc('来月から',3,
+          k('serif','来月から、転勤になった。',to),
+          k('serif','……そうですか。遠いんですか。',mi),
+          k('serif','電車で2時間。',to),
+          k('memo','湊はうまく笑えず、レジの下で手をにぎりしめる。'),
+          k('mono','2時間。……金曜日が、なくなる。',mi),
+          k('mono','行かないでって言える立場じゃないのに。',mi))]},
+      {id:rid('s'),title:'結',hue:'s4',pages:6,scenes:[
+        sc('最後の雨',9,
+          k('memo','透の最後の出勤日。また雨。透はやっぱり、傘を持たずに店に来る。'),
+          k('serif','真木さん、また傘忘れたんですか。',mi),
+          k('serif','忘れてない。わざと持ってこなかった。',to,{id:f2,role:'pay'}),
+          k('serif','借りたら、また会いに来る理由になるから。最初の日から、ずっとそうしてた。',to),
+          k('serif','湊。……2時間かかっても、会いに来ていいか。',to),
+          k('serif','……名前、なんで知ってるんですか。',mi),
+          k('serif','傘に書いてあった。あの日から、心の中ではずっとそう呼んでた。',to,{id:f1,role:'pay'})),
+        sc('傘の下で',10,
+          k('memo','湊が、いちばん大きい傘を開いて、透を入れる。'),
+          k('serif','返しに来なくていいです。……僕が会いに行くので。',mi),
+          k('serif','それは、ずるい。',to),
+          k('memo','傘の下、透が湊の手をとる。今度は、あたたかい。'),
+          k('serif','好きだ。',to),
+          k('serif','……僕もです。透さん。',mi),
+          k('mono','雨の日が、好きになった。',mi))]}
     ]});
 }
 
@@ -937,6 +1025,7 @@ async function loadLocal(){
   for(const S of Object.values(seriesMap)) S._fp=sharedFp(S);
   linkSeries();
   if(!Object.keys(projects).length){ const s=sampleProject(); projects[s.id]=s; IDB.put([s]).catch(()=>{}); }
+  upgradeSample();
   const c=lsGet(LS_CUR); cur=projects[c]?c:firstId();
 }
 function saveLocal(){ lsSet(LS_CUR,cur); return true; }
@@ -1035,7 +1124,7 @@ async function syncNow(interactive){
     }
     if(save.length) await IDB.put(save);
     lastSync=Date.now(); lastSyncErr=''; setSync('ok');
-    if(changed){ linkSeries(); if(!projects[cur]) cur=firstId(); safeRender(); }
+    if(changed){ linkSeries(); upgradeSample(); if(!projects[cur]) cur=firstId(); safeRender(); }
   }catch(e){
     console.warn(e);
     const msg=(e&&e.message)||'同期できませんでした';
@@ -1075,7 +1164,7 @@ function renderAll(){
   $('#layRows').setAttribute('aria-pressed',String(P().layout==='rows'));
   $('#tempBtn').setAttribute('aria-pressed',String(showTemp));
   const ti=$('#targetIn'); if(document.activeElement!==ti) ti.value=P().target?String(P().target):'';
-  renderBoard(); renderChars(); renderNotes(); renderTemp(); updateStats(); renderSide();
+  renderBoard(); renderChars(); renderNotes(); renderRels(); renderTemp(); updateStats(); renderSide();
 }
 function renderProjSel(){
   const sel=$('#projSel'); const all=Object.values(projects);
@@ -1773,6 +1862,7 @@ function renderChars(){
   const p=P();
   charSortable?.destroy(); charSortable=null;
   charsEl.replaceChildren(...p.chars.map(charEl), h('button',{class:'add-char','data-act':'addchar'},'＋ キャラを追加'));
+  if(typeof relSoon==='function') relSoon(true);
   if(window.Sortable) charSortable=Sortable.create(charsEl,{handle:'.char-grip',draggable:'.char',animation:REDUCED?0:150,onEnd:()=>{
     const m=Object.fromEntries(P().chars.map(c=>[c.id,c]));
     const order=[...charsEl.querySelectorAll('.char')].map(el=>m[el.dataset.id]).filter(Boolean);
@@ -2227,6 +2317,377 @@ $('#expMenuBtn').addEventListener('click',e=>{
 });
 new ResizeObserver(()=>document.documentElement.style.setProperty('--barh',$('.appbar').offsetHeight+'px')).observe($('.appbar'));
 
+/* ================= 相関図 ================= */
+/* 2人ずつ「aから見たb(ab)」「bから見たa(ba)」を登録すると、アイコン・矢印・ことばを自動で並べる。
+   並べ方: いくつかの初期配置から力学モデルで広げ、線の交差・アイコンを横切る線・ことばの重なりが少ないものを選ぶ */
+const relsEl=$('#rels'), relMapEl=$('#relMap');
+const REL_R=38;                       // アイコンの半径
+const relName=c=>c?(c.name||'名前未設定'):'？';
+// 画像がないときの丸の中の1文字。「久世 蓮司」なら下の名前の「蓮」
+const relInitial=c=>{ const parts=relName(c).trim().split(/[\s　]+/); return [...(parts[1]||parts[0]||'？')][0]; };
+function relPairs(p){
+  const ids=new Set(p.chars.map(c=>c.id)); const m=new Map();
+  const add=(e,k,t)=>{ t=t.trim(); if(t) e[k]=e[k]?e[k]+'／'+t:t; };
+  for(const r of p.rels){
+    if(!ids.has(r.a)||!ids.has(r.b)||r.a===r.b) continue;
+    const [x,y]=r.a<r.b?[r.a,r.b]:[r.b,r.a]; const key=x+'|'+y;
+    const e=m.get(key)||{x,y,xy:'',yx:''};
+    if(r.a===x){ add(e,'xy',r.ab); add(e,'yx',r.ba); } else { add(e,'yx',r.ab); add(e,'xy',r.ba); }
+    m.set(key,e);
+  }
+  return [...m.values()];
+}
+// ことばを1行10文字ほどで折り返す
+function relLines(t){ const out=[]; let s=String(t||''); if([...s].length<=12) return s?[s]:[]; while(s.length>10&&out.length<2){ out.push(s.slice(0,10)); s=s.slice(10); } if(s) out.push(out.length===2&&s.length>10?s.slice(0,9)+'…':s); return out; }
+const relTextW=t=>Math.max(...relLines(t).map(l=>[...l].reduce((w,ch)=>w+(ch.charCodeAt(0)<128?7.5:13),0)),0);
+function mulberry(a){ return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function segCross(a,b,c,d){
+  const o=(p,q,r)=>Math.sign((q.x-p.x)*(r.y-p.y)-(q.y-p.y)*(r.x-p.x));
+  return o(a,b,c)*o(a,b,d)<0&&o(c,d,a)*o(c,d,b)<0;
+}
+function segDist(p,a,b){ const vx=b.x-a.x, vy=b.y-a.y, L=vx*vx+vy*vy||1; let t=((p.x-a.x)*vx+(p.y-a.y)*vy)/L; t=Math.max(0,Math.min(1,t)); return Math.hypot(a.x+t*vx-p.x,a.y+t*vy-p.y); }
+// 2人の間の矢印の位置と、ことばの位置。描くときと、配置を採点するときの両方で使う
+function relGeom(pos,e){
+  const A=pos[e.x], B=pos[e.y], dx=B.x-A.x, dy=B.y-A.y, L=Math.hypot(dx,dy)||1;
+  let nx=-dy/L, ny=dx/L; if(ny<0||(ny===0&&nx<0)){ nx=-nx; ny=-ny; }   // ことばは下側(または右側)を優先
+  const both=!!(e.xy&&e.yx), out=[];
+  // 下から入る線は、アイコンの下の名前の手前で止める
+  const gapAt=(P0,ox,oy)=>REL_R+(oy>0.55?30:6)+(Math.abs(ox)>0.8&&oy>0.2?8:0);
+  const seg=(from,to,side,label,src)=>{
+    const ux=(to.x-from.x)/L, uy=(to.y-from.y)/L, g1=gapAt(from,ux,uy), g2=gapAt(to,-ux,-uy)+3;
+    const sx=from.x+ux*g1+nx*side, sy=from.y+uy*g1+ny*side, ex=to.x-ux*g2+nx*side, ey=to.y-uy*g2+ny*side;
+    let lx=0, ly=0, w=0, h=0;
+    if(label){ const sgn=side<0?-1:1, nl=relLines(label).length;
+      w=relTextW(label)+10; h=nl*16+6;
+      // 矢印の傾きに合わせて、ことばの箱が線にかからない距離だけ離す
+      const off=Math.abs(nx)*w/2+Math.abs(ny)*h/2+5;
+      lx=(sx+ex)/2-ux*(both?10:0)+nx*sgn*off; ly=(sy+ey)/2-uy*(both?10:0)+ny*sgn*off; }
+    out.push({sx,sy,ex,ey,label,src,lx,ly,w,h});
+  };
+  if(!e.xy&&!e.yx) seg(A,B,0,'',e.x);
+  else{ if(e.xy) seg(A,B,both?9:0,e.xy,e.x); if(e.yx) seg(B,A,both?-9:0,e.yx,e.y); }
+  return out;
+}
+function relLayout(ids,pairs,gap){
+  const n=ids.length, pos={};
+  if(n===1){ pos[ids[0]]={x:0,y:0}; return pos; }
+  if(n===2){ pos[ids[0]]={x:-gap/2,y:0}; pos[ids[1]]={x:gap/2,y:0}; return pos; }
+  const ix=Object.fromEntries(ids.map((id,i)=>[id,i]));
+  const E=pairs.map(e=>[ix[e.x],ix[e.y]]);
+  const deg=ids.map((_,i)=>E.filter(([a,b])=>a===i||b===i).length);
+  const nb=ids.map((_,i)=>E.filter(([a,b])=>a===i||b===i).map(([a,b])=>a===i?b:a));
+  // 採点: 交差・横切り・重なり・広がりすぎ(小さいほど良い)
+  const scoreOf=P=>{
+    let score=0;
+    for(let i=0;i<E.length;i++) for(let j=i+1;j<E.length;j++){
+      const [a,b]=E[i],[c,d]=E[j]; if(a===c||a===d||b===c||b===d) continue;
+      if(segCross(P[a],P[b],P[c],P[d])) score+=1000;
+    }
+    for(const [a,b] of E) for(let i=0;i<n;i++) if(i!==a&&i!==b){ const d=segDist(P[i],P[a],P[b]); if(d<REL_R+30) score+=800; else if(d<REL_R+60) score+=200; }
+    // 1人から出る線どうしが狭い角度だと、矢印とことばがくっつくので減点
+    for(let i=0;i<n;i++){ const ang=nb[i].map(j=>Math.atan2(P[j].y-P[i].y,P[j].x-P[i].x));
+      for(let a=0;a<ang.length;a++) for(let b=a+1;b<ang.length;b++){ let d=Math.abs(ang[a]-ang[b]); if(d>Math.PI) d=2*Math.PI-d; if(d<0.45) score+=350*(1-d/0.45)+100; } }
+    for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){ const d=Math.hypot(P[i].x-P[j].x,P[i].y-P[j].y); if(d<gap*0.9) score+=500; }
+    // 関係のある2人は近いほうが読みやすい
+    for(const [a,b] of E) score+=Math.hypot(P[a].x-P[b].x,P[a].y-P[b].y)/gap*8;
+    const xs=P.map(p=>p.x), ys=P.map(p=>p.y);
+    score+=((Math.max(...xs)-Math.min(...xs))+(Math.max(...ys)-Math.min(...ys)))/gap*3;
+    // ことば同士・ことばとアイコンが重ならないか
+    const tmp={}; ids.forEach((id,i)=>tmp[id]=P[i]);
+    const geo=pairs.flatMap(e=>relGeom(tmp,e)), boxes=geo.filter(g=>g.label);
+    // ことばの上をほかの矢印が通らないか
+    for(const g of boxes) for(const l of geo){ if(l===g) continue;
+      if(segDist({x:g.lx,y:g.ly},{x:l.sx,y:l.sy},{x:l.ex,y:l.ey})<Math.min(g.w,g.h*2.2)/2+3) score+=250; }
+    const hit=(a,b)=>Math.abs(a.lx-b.lx)<(a.w+b.w)/2&&Math.abs(a.ly-b.ly)<(a.h+b.h)/2;
+    for(let i=0;i<boxes.length;i++){
+      for(let j=i+1;j<boxes.length;j++) if(hit(boxes[i],boxes[j])) score+=400;
+      for(const q of P) if(Math.abs(boxes[i].lx-q.x)<boxes[i].w/2+REL_R&&Math.abs(boxes[i].ly-q.y)<boxes[i].h/2+REL_R+22) score+=400;
+    }
+    return score;
+  };
+  const cands=[];
+  const tries=Math.min(40,10+n*3);
+  for(let t=0;t<tries;t++){
+    const rnd=mulberry(1000+t*7919);
+    // 初期配置: 円の上に並べる(1回目は登録順、2回目はつながりの多い人を真ん中、ほかは混ぜる)
+    let order=ids.map((_,i)=>i);
+    if(t>1) order.sort(()=>rnd()-.5);
+    const hub=t===1?deg.indexOf(Math.max(...deg)):-1;
+    const R=gap*Math.max(1,n/5);
+    const P=ids.map(()=>({x:0,y:0}));
+    const ring=order.filter(i=>i!==hub);
+    ring.forEach((i,k)=>{ const a=-Math.PI/2+k*2*Math.PI/ring.length; P[i]={x:R*Math.cos(a),y:R*Math.sin(a)}; });
+    if(hub>=0) P[hub]={x:0,y:0};
+    // 半分は、ばらばらの位置から始める(いろいろな形を試すため)
+    if(t>2&&t%2) ids.forEach((_,i)=>{ P[i]={x:(rnd()-.5)*R*2,y:(rnd()-.5)*R*2}; });
+    // 力学モデル: みんな離れようとし、関係のある2人は引き合う
+    const k=gap*0.95, T=200;
+    for(let it=0;it<T;it++){
+      const temp=gap*0.25*(1-it/T)+1, D=P.map(()=>({x:0,y:0}));
+      for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){
+        let dx=P[i].x-P[j].x, dy=P[i].y-P[j].y, d=Math.hypot(dx,dy); if(d<1){ dx=rnd()-.5; dy=rnd()-.5; d=1; }
+        const f=k*k/d; D[i].x+=dx/d*f; D[i].y+=dy/d*f; D[j].x-=dx/d*f; D[j].y-=dy/d*f;
+      }
+      for(const [a,b] of E){ const dx=P[a].x-P[b].x, dy=P[a].y-P[b].y, d=Math.hypot(dx,dy)||1, f=d*d/k;
+        D[a].x-=dx/d*f; D[a].y-=dy/d*f; D[b].x+=dx/d*f; D[b].y+=dy/d*f; }
+      for(let i=0;i<n;i++){ D[i].x-=P[i].x*0.04*k/10; D[i].y-=P[i].y*0.04*k/10;
+        const d=Math.hypot(D[i].x,D[i].y)||1, m=Math.min(d,temp); P[i].x+=D[i].x/d*m; P[i].y+=D[i].y/d*m; }
+    }
+    // 仕上げ: 近すぎる2人を離し、関係のない線がアイコンを横切らないように押し出す
+    for(let it=0;it<80;it++){
+      let moved=false;
+      for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){
+        const dx=P[j].x-P[i].x, dy=P[j].y-P[i].y, d=Math.hypot(dx,dy)||1;
+        if(d<gap){ const m=(gap-d)/2+.5; P[i].x-=dx/d*m; P[i].y-=dy/d*m; P[j].x+=dx/d*m; P[j].y+=dy/d*m; moved=true; }
+      }
+      for(const [a,b] of E) for(let i=0;i<n;i++){
+        if(i===a||i===b) continue;
+        const d=segDist(P[i],P[a],P[b]), need=REL_R+46;
+        if(d<need){ const vx=P[b].x-P[a].x, vy=P[b].y-P[a].y, L=Math.hypot(vx,vy)||1;
+          let nx=-vy/L, ny=vx/L; if((P[i].x-P[a].x)*nx+(P[i].y-P[a].y)*ny<0){ nx=-nx; ny=-ny; }
+          const m=need-d+1; P[i].x+=nx*m; P[i].y+=ny*m; moved=true; }
+      }
+      if(!moved) break;
+    }
+    cands.push(P.map(p=>({...p})));
+  }
+  // 良さそうな数案について、2人の場所を入れ替えて良くなるなら入れ替える
+  const scored=cands.map(P=>({P,sc:scoreOf(P)})).sort((a,b)=>a.sc-b.sc).slice(0,n>8?2:3);
+  let best=scored[0].P, bestScore=scored[0].sc;
+  for(const c of scored){
+    let P=c.P, sc=c.sc;
+    for(let round=0;round<(n>8?2:3);round++){
+      let improved=false;
+      // 2人の場所を入れ替える
+      for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){
+        const Q=P.slice(); [Q[i],Q[j]]=[Q[j],Q[i]];
+        const q=scoreOf(Q); if(q<sc-0.5){ P=Q; sc=q; improved=true; }
+      }
+      // 1人を、関係のある相手の近くの別の場所へ動かしてみる
+      for(let i=0;i<n;i++){
+        const ns=nb[i].length?nb[i]:[...Array(n).keys()].filter(j=>j!==i);
+        const cx=ns.reduce((a,j)=>a+P[j].x,0)/ns.length, cy=ns.reduce((a,j)=>a+P[j].y,0)/ns.length;
+        for(const rr of [0.85,1.4]) for(let k=0;k<10;k++){
+          const a=k*Math.PI/5, Q=P.slice(); Q[i]={x:cx+Math.cos(a)*gap*rr,y:cy+Math.sin(a)*gap*rr};
+          const q=scoreOf(Q); if(q<sc-0.5){ P=Q; sc=q; improved=true; }
+        }
+      }
+      if(!improved) break;
+    }
+    if(sc<bestScore){ bestScore=sc; best=P; }
+  }
+  // 横長の画面に収まりやすいように、縦長なら90度回す
+  const xs=best.map(p=>p.x), ys=best.map(p=>p.y);
+  if(Math.max(...ys)-Math.min(...ys)>(Math.max(...xs)-Math.min(...xs))*1.15) best=best.map(p=>({x:p.y,y:-p.x}));
+  ids.forEach((id,i)=>pos[id]=best[i]);
+  return pos;
+}
+const escX=t=>String(t).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+const avatarCache=new Map();
+const relPosCache=new Map();
+const imKey=im=>im.a?'a'+im.a:'d'+im.d.length+im.d.slice(-48);
+// 書き出し用に、アイコンを小さな画像(データ)にしておく
+async function prepAvatars(p){
+  await Promise.all(p.chars.filter(c=>c.images[0]).map(c=>new Promise(res=>{
+    const im=c.images[0], key=imKey(im); if(avatarCache.has(key)) return res();
+    const img=new Image(); img.crossOrigin='anonymous';
+    img.onload=()=>{ try{ const S=200, cv=document.createElement('canvas'); cv.width=cv.height=S; const g=cv.getContext('2d');
+      const r=Math.max(S/img.naturalWidth,S/img.naturalHeight), w=img.naturalWidth*r, h2=img.naturalHeight*r;
+      g.drawImage(img,(S-w)/2,(S-h2)/2,w,h2); avatarCache.set(key,cv.toDataURL('image/jpeg',.86)); }catch{} res(); };
+    img.onerror=()=>res(); img.src=imgSrc(im);
+  })));
+}
+// 相関図のSVG。画面では画像をそのまま、書き出しでは小さくしたデータを使う
+function relSvg(p,forImage,view){
+  const pairs=relPairs(p); if(!pairs.length) return null;
+  const used=new Set(pairs.flatMap(e=>[e.x,e.y]));
+  const ids=p.chars.filter(c=>used.has(c.id)).map(c=>c.id);
+  const longest=Math.max(0,...pairs.map(e=>Math.max(relTextW(e.xy),relTextW(e.yx))));
+  const gap=Math.max(210,Math.min(360,Math.ceil((REL_R*2+longest+60)/30)*30));
+  // 並べ方は、人と関係の組み合わせ(とことばのおおよその長さ)が同じなら使い回す。1文字打つたびに並びが変わらないように
+  const lkey=JSON.stringify([ids,gap,pairs.map(e=>[e.x,e.y,Math.ceil(relTextW(e.xy)/40),Math.ceil(relTextW(e.yx)/40)])]);
+  let pos=relPosCache.get(lkey);
+  if(!pos){ pos=relLayout(ids,pairs,gap); relPosCache.set(lkey,pos); if(relPosCache.size>30) relPosCache.delete(relPosCache.keys().next().value); }
+  const C=id=>p.chars.find(c=>c.id===id);
+  // 手で動かした人がいれば、その位置を使う。まだ置いていない人は、関係のある相手の近くの空いている所へ
+  if(ids.some(id=>C(id).rp)){
+    const fixed={}; ids.forEach(id=>{ const c=C(id); if(c.rp) fixed[id]={...c.rp}; });
+    for(const id of ids){
+      if(fixed[id]) continue;
+      const nbs=pairs.filter(e=>e.x===id||e.y===id).map(e=>e.x===id?e.y:e.x).filter(j=>fixed[j]);
+      const pts=Object.values(fixed), src=nbs.length?nbs.map(j=>fixed[j]):pts;
+      const cx=src.reduce((a,q)=>a+q.x,0)/src.length, cy=src.reduce((a,q)=>a+q.y,0)/src.length;
+      let best=null;
+      for(let ring=1;ring<8&&!best;ring++) for(let k=0;k<16;k++){
+        const a=k*Math.PI/8+ring*.3, q={x:cx+Math.cos(a)*gap*ring*.8,y:cy+Math.sin(a)*gap*ring*.8};
+        if(pts.every(o=>Math.hypot(o.x-q.x,o.y-q.y)>=gap*.85)){ best=q; break; }
+      }
+      fixed[id]=best||{x:cx+gap,y:cy};
+    }
+    pos=fixed;
+  }
+  const ink='#1A2030', bg='#FFFFFF';
+  const xs=ids.map(id=>pos[id].x), ys=ids.map(id=>pos[id].y);
+  const M=REL_R+Math.max(70,longest/2+20);
+  let x0=Math.min(...xs)-M, y0=Math.min(...ys)-REL_R-34, W=Math.max(...xs)-Math.min(...xs)+M*2, H=Math.max(...ys)-Math.min(...ys)+REL_R*2+34+46;
+  if(view){ x0=view.x; y0=view.y; W=view.w; H=view.h; }   // ドラッグ中は枠を動かさない
+  const defs=[], lines=[], labels=[], nodes=[];
+  const colors=new Set(p.chars.map(c=>c.color));
+  colors.forEach(k=>defs.push(`<marker id="rm-ah-${k}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${EXC[k]}"/></marker>`));
+  const text=(x,y,t,col,size,weight,cls='')=>{
+    const ls=relLines(t), lh=size*1.25, top=y-(ls.length-1)*lh/2;
+    return `<text x="${x.toFixed(1)}" y="${top.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="${size}" font-weight="${weight}" fill="${col}" ${cls?`class="${cls}"`:''} font-family="'Zen Kaku Gothic New','Hiragino Kaku Gothic ProN','Noto Sans JP','Yu Gothic',Meiryo,sans-serif">`+
+      ls.map((l,i)=>`<tspan x="${x.toFixed(1)}" dy="${i?lh:0}">${escX(l)}</tspan>`).join('')+`</text>`;
+  };
+  const halo=(x,y,t,col,size,weight)=>text(x,y,t,bg,size,weight,'rm-halo').replace('<text ','<text stroke="'+bg+'" stroke-width="6" stroke-linejoin="round" ')+text(x,y,t,col,size,weight);
+  for(const e of pairs) for(const g of relGeom(pos,e)){
+    const k=(C(g.src)||{}).color||'k1', col=EXC[k];
+    lines.push(`<line x1="${g.sx.toFixed(1)}" y1="${g.sy.toFixed(1)}" x2="${g.ex.toFixed(1)}" y2="${g.ey.toFixed(1)}" stroke="${col}" stroke-width="2.4" stroke-linecap="round"${g.label?` marker-end="url(#rm-ah-${k})"`:''}/>`);
+    if(g.label) labels.push(halo(g.lx,g.ly,g.label,col,13,700));
+  }
+  for(const id of ids){
+    const c=C(id), P0=pos[id], col=EXC[c.color], im=c.images[0];
+    const href=im?(avatarCache.get(imKey(im))||(forImage?'':imgSrc(im))):'';
+    const cid='rm-c-'+id.replace(/[^a-z0-9]/gi,'');
+    nodes.push(`<g class="rm-node" data-id="${escX(id)}">`);
+    if(href){
+      defs.push(`<clipPath id="${cid}"><circle cx="${P0.x.toFixed(1)}" cy="${P0.y.toFixed(1)}" r="${REL_R}"/></clipPath>`);
+      nodes.push(`<circle cx="${P0.x.toFixed(1)}" cy="${P0.y.toFixed(1)}" r="${REL_R}" fill="#F1F3F7" class="rm-bg"/><image href="${escX(href)}" xlink:href="${escX(href)}" x="${(P0.x-REL_R).toFixed(1)}" y="${(P0.y-REL_R).toFixed(1)}" width="${REL_R*2}" height="${REL_R*2}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${cid})"/>`);
+    }else{
+      nodes.push(`<circle cx="${P0.x.toFixed(1)}" cy="${P0.y.toFixed(1)}" r="${REL_R}" fill="${col}" fill-opacity=".14"/>`+
+        `<text x="${P0.x.toFixed(1)}" y="${P0.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="28" font-weight="700" fill="${col}" font-family="'Zen Kaku Gothic New','Noto Sans JP',sans-serif">${escX(relInitial(c))}</text>`);
+    }
+    nodes.push(`<circle cx="${P0.x.toFixed(1)}" cy="${P0.y.toFixed(1)}" r="${REL_R}" fill="none" stroke="${col}" stroke-width="3"/>`);
+    nodes.push(halo(P0.x,P0.y+REL_R+17,relName(c),ink,15,700).replace(/fill="#1A2030"/g,'fill="#1A2030" class="rm-name"'));
+    nodes.push(`</g>`);
+  }
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="${x0.toFixed(1)} ${y0.toFixed(1)} ${W.toFixed(1)} ${H.toFixed(1)}" width="${Math.round(W)}" height="${Math.round(H)}">`+
+    (forImage?`<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="#fff"/>`:'')+
+    `<defs>${defs.join('')}</defs><g>${lines.join('')}</g><g>${nodes.join('')}</g><g>${labels.join('')}</g></svg>`;
+  return {svg,w:W,h:H,pos,view:{x:x0,y:y0,w:W,h:H}};
+}
+function renderRelMap(){
+  const p=P(); if(!p) return;
+  const r=relSvg(p,false);
+  if(!r){ $('#relAutoBtn').hidden=true; relMapEl.innerHTML=''; relMapEl.append(h('p',{class:'empty'},p.chars.length<2?'キャラを2人以上登録すると、相関図を作れます。':'「＋ 関係を追加」で、2人の関係を登録すると図になります。')); $('#saveRelBtn').hidden=true; return; }
+  relMapEl.innerHTML=r.svg; relLast=r;
+  $('#relAutoBtn').hidden=!p.chars.some(c=>c.rp);
+  const sv=relMapEl.querySelector('svg'); sv.style.width=Math.round(r.w)+'px'; sv.style.maxWidth='100%'; sv.style.minWidth=Math.round(Math.min(r.w,r.w*.62))+'px';
+  sv.setAttribute('role','img'); sv.setAttribute('aria-label','キャラの相関図');
+  $('#saveRelBtn').hidden=!downloads;
+}
+let relTimer=null;
+function relSoon(now){ clearTimeout(relTimer); if(now) renderRelMap(); else relTimer=setTimeout(renderRelMap,250); }
+function renderRels(){
+  const p=P(); if(!p) return;
+  const a=document.activeElement; if(a&&relsEl.contains(a)&&a.tagName==='INPUT'){ relSoon(); return; }
+  const opts=sel=>p.chars.map(c=>h('option',{value:c.id,selected:c.id===sel},relName(c)));
+  relsEl.replaceChildren(...p.rels.map(r=>{
+    const A=charById(r.a), B=charById(r.b);
+    return h('div',{class:'rel',dataset:{id:r.id}},
+      h('div',{class:'rel-top'},
+        h('select',{'data-rf':'a','aria-label':'1人目'},opts(r.a)),
+        h('span',{class:'rel-x','aria-hidden':'true'},'⇄'),
+        h('select',{'data-rf':'b','aria-label':'2人目'},opts(r.b)),
+        h('button',{class:'mini del','data-rdel':r.id,'aria-label':'この関係を削除',title:'この関係を削除'},'×')),
+      h('label',{class:'rel-l'},h('span',null,`${relName(A)} から見た ${relName(B)}`),h('input',{'data-rf':'ab',value:r.ab,placeholder:'例：片想いの相手'})),
+      h('label',{class:'rel-l'},h('span',null,`${relName(B)} から見た ${relName(A)}`),h('input',{'data-rf':'ba',value:r.ba,placeholder:'例：気になる常連さん'})));
+  }));
+  renderRelMap();
+}
+function addRel(){
+  const p=P();
+  if(p.chars.length<2){ toast('先にキャラを2人以上登録してください'); return; }
+  // まだ関係を登録していない2人を選んでおく
+  let a=p.chars[0].id, b=p.chars[1].id;
+  outer: for(const x of p.chars) for(const y of p.chars){
+    if(x.id===y.id) continue;
+    if(!p.rels.some(r=>(r.a===x.id&&r.b===y.id)||(r.a===y.id&&r.b===x.id))){ a=x.id; b=y.id; break outer; }
+  }
+  const r={id:rid('r'),a,b,ab:'',ba:''}; p.rels.push(r); touch(); renderRels();
+  requestAnimationFrame(()=>relsEl.querySelector(`.rel[data-id="${r.id}"] input`)?.focus());
+}
+relsEl.addEventListener('input',e=>{
+  const f=e.target.dataset.rf; if(f!=='ab'&&f!=='ba') return;
+  const r=P().rels.find(x=>x.id===e.target.closest('.rel').dataset.id); if(!r) return;
+  r[f]=e.target.value; touch(); relSoon();
+});
+relsEl.addEventListener('change',e=>{
+  const f=e.target.dataset.rf; if(f!=='a'&&f!=='b') return;
+  const r=P().rels.find(x=>x.id===e.target.closest('.rel').dataset.id); if(!r) return;
+  const v=e.target.value, other=f==='a'?r.b:r.a;
+  if(v===other){ // 同じ人を選んだら、入れかえる
+    if(f==='a'){ r.b=r.a; r.a=v; [r.ab,r.ba]=[r.ba,r.ab]; } else { r.a=r.b; r.b=v; [r.ab,r.ba]=[r.ba,r.ab]; }
+  }else r[f]=v;
+  touch(); renderRels();
+});
+relsEl.addEventListener('click',e=>{
+  const b=e.target.closest('[data-rdel]'); if(!b) return;
+  const p=P(), i=p.rels.findIndex(x=>x.id===b.dataset.rdel); if(i<0) return;
+  const r=p.rels.splice(i,1)[0]; touch(); renderRels();
+  lastUndo=()=>{ p.rels.splice(Math.min(i,p.rels.length),0,r); touch(); renderRels(); };
+  toast('関係を削除しました',{label:'元に戻す',fn:()=>lastUndo&&lastUndo()});
+});
+relsEl.addEventListener('focusout',()=>setTimeout(()=>{ if(!relsEl.contains(document.activeElement)) renderRelMap(); },50));
+charsEl.addEventListener('input',()=>{ relSoon(); });
+charsEl.addEventListener('change',()=>{ relSoon(); });
+$('#addRelBtn').addEventListener('click',addRel);
+/* アイコンを手で動かす。動かし始めたら、そのときの並びを全員分おぼえて固定する */
+let relLast=null, relDrag=null;
+function relSvgPoint(e){ const sv=relMapEl.querySelector('svg'); const m=sv.getScreenCTM(); if(!m) return null; const pt=new DOMPoint(e.clientX,e.clientY).matrixTransform(m.inverse()); return {x:pt.x,y:pt.y}; }
+relMapEl.addEventListener('pointerdown',e=>{
+  const g=e.target.closest('.rm-node'); if(!g||!relLast||e.button>0) return;
+  const p=P(), pt=relSvgPoint(e); if(!pt) return;
+  e.preventDefault();
+  relDrag={id:g.dataset.id,pid:e.pointerId,dx:relLast.pos[g.dataset.id].x-pt.x,dy:relLast.pos[g.dataset.id].y-pt.y,view:relLast.view,moved:false,sx:e.clientX,sy:e.clientY};
+  try{ relMapEl.setPointerCapture(e.pointerId); }catch{}
+});
+relMapEl.addEventListener('pointermove',e=>{
+  if(!relDrag||e.pointerId!==relDrag.pid) return;
+  if(!relDrag.moved&&Math.hypot(e.clientX-relDrag.sx,e.clientY-relDrag.sy)<3) return;
+  if(!relDrag.moved){ // 動かし始めたら、今の並びをそのまま固定する
+    for(const [id,q] of Object.entries(relLast.pos)){ const c=charById(id); if(c&&!c.rp) c.rp={x:Math.round(q.x),y:Math.round(q.y)}; } }
+  relDrag.moved=true; relMapEl.classList.add('dragging');
+  const pt=relSvgPoint(e); if(!pt) return;
+  const c=charById(relDrag.id); if(!c) return;
+  c.rp={x:Math.round(pt.x+relDrag.dx),y:Math.round(pt.y+relDrag.dy)};
+  const r=relSvg(P(),false,relDrag.view); if(!r) return;
+  const sv=relMapEl.querySelector('svg'), st=sv.getAttribute('style');
+  relMapEl.innerHTML=r.svg; const nv=relMapEl.querySelector('svg'); nv.setAttribute('style',st); relLast={...r,view:relDrag.view};
+});
+const relUp=e=>{
+  if(!relDrag||e.pointerId!==relDrag.pid) return;
+  const moved=relDrag.moved; relDrag=null; relMapEl.classList.remove('dragging');
+  if(moved){ touch(); renderRelMap(); }
+};
+relMapEl.addEventListener('pointerup',relUp); relMapEl.addEventListener('pointercancel',relUp);
+// スマホ: アイコンをつかんだときは画面をスクロールさせない
+relMapEl.addEventListener('touchstart',e=>{ if(e.target.closest&&e.target.closest('.rm-node')) e.preventDefault(); },{passive:false});
+$('#relAutoBtn').addEventListener('click',()=>{
+  const p=P(), saved=p.chars.map(c=>[c,c.rp]);
+  p.chars.forEach(c=>c.rp=null); touch(); renderRelMap();
+  lastUndo=()=>{ saved.forEach(([c,rp])=>c.rp=rp); touch(); renderRelMap(); };
+  toast('自動で並べ直しました',{label:'元に戻す',fn:()=>lastUndo&&lastUndo()});
+});
+async function relPng(p){
+  await prepAvatars(p);
+  const r=relSvg(p,true); if(!r) return null;
+  const img=new Image(); img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(r.svg);
+  await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; });
+  const sc=2, cv=document.createElement('canvas'); cv.width=Math.round(r.w*sc); cv.height=Math.round(r.h*sc);
+  const g=cv.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,cv.width,cv.height); g.drawImage(img,0,0,cv.width,cv.height);
+  return await new Promise(res=>cv.toBlob(res,'image/png'));
+}
+$('#saveRelBtn').addEventListener('click',async()=>{
+  try{ const blob=await relPng(P()); if(!blob) return; await saveFile(safeName(SER()?(SER().name||fullTitle(P())):fullTitle(P()))+'_相関図.png',blob); }
+  catch(err){ console.error(err); toast('画像にできませんでした'); }
+});
+function exRels(p){
+  const r=relSvg(p,true); if(!r) return [];
+  return [h('div',{class:'ex-relmap brk'},h('div',{class:'ex-cap'},'相関図'),
+    h('img',{src:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(r.svg),alt:'相関図',style:`width:${Math.round(Math.min(r.w,800))}px`}))];
+}
+
 /* ================= overlays ================= */
 let popEl=null;
 function popover(anchor,build){
@@ -2479,7 +2940,7 @@ function buildStage(p,o){
       o.temp!==false&&tempPoints(p).some(q=>q.scene.temp!=null)?h('div',{class:'ex-temp brk'},h('div',{class:'ex-cap'},p.tempTitle||'温度グラフ'),
         h('img',{src:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(tempMarkup(p,EX_COL,false)),alt:''})):null,
       o.shape==='board'?exPlotBoard(p):exPlotList(p), ...exExtras(p)]:null,
-    o.what!=='plot'?[o.what==='both'?h('div',{class:'ex-part brk'},'キャラ・設定'):null, ...exChars(p), ...exNotes(p)]:null);
+    o.what!=='plot'?[o.what==='both'?h('div',{class:'ex-part brk'},'キャラ・設定'):null, ...exChars(p), ...exRels(p), ...exNotes(p)]:null);
   const stage=$('#stage'); stage.replaceChildren(root);
   return root;
 }
@@ -2497,6 +2958,7 @@ async function doExport(o,status){
   const p=P();
   status('準備しています…');
   await loadScript(H2C); if(o.fmt==='pdf') await loadScript(JSPDF);
+  if(o.what!=='plot') await prepAvatars(p);
   const root=buildStage(p,o); await waitImages(root);
   const W=root.offsetWidth, Hh=root.offsetHeight;
   const scale=Math.min(2,14000/Hh,14000/W);
@@ -2599,7 +3061,7 @@ applyTheme();
 function newEpisode(S,from=P()){
   const p=blankProject(''); p.series=S.id; p.seriesName=S.name; p.ep=nextEp(S);
   if(from&&from.series===S.id){ p.layout=from.layout; p.target=from.target; p.tempTitle=from.tempTitle; p.tempHigh=from.tempHigh; p.tempLow=from.tempLow; }
-  p.chars=S.chars; p.notes=S.notes; p.foreshadows=S.foreshadows;
+  p.chars=S.chars; p.notes=S.notes; p.foreshadows=S.foreshadows; p.rels=S.rels;
   projects[p.id]=p; selected.clear(); cur=p.id; lsSet(LS_CUR,cur); tab='plot'; lsSet(LS_TAB,tab); touch(p); renderAll();
   toast(`${fullTitle(p)}を作りました。キャラ・設定・伏線は引き継いでいます`);
   requestAnimationFrame(()=>$('#projTitle').focus());
@@ -2631,10 +3093,10 @@ function openJoinSeries(p){
       const n=ep.value===''?1:Math.max(0,Math.round(Number(ep.value)||0));
       if(pick==='new'){
         const nm=name.value.trim()||(p.title!=='無題のプロット'&&p.title)||'無題のシリーズ';
-        const S=makeSeries(nm,p.chars,p.notes,p.foreshadows);
+        const S=makeSeries(nm,p.chars,p.notes,p.foreshadows,p.rels);
         if(tm&&tm[1].trim()===nm) p.title=tm[3].trim();
         else if(p.title===nm||p.title==='無題のプロット') p.title='';
-        p.series=S.id; p.seriesName=S.name; p.chars=S.chars; p.notes=S.notes; p.foreshadows=S.foreshadows;
+        p.series=S.id; p.seriesName=S.name; p.chars=S.chars; p.notes=S.notes; p.foreshadows=S.foreshadows; p.rels=S.rels;
       }else{
         const S=seriesMap[pick]; joinSeries(p,S);
         if(tm&&tm[1].trim()===S.name.trim()) p.title=tm[3].trim();
@@ -2653,6 +3115,7 @@ $('#projMenuBtn').addEventListener('click',e=>{
     h('hr'),
     h('button',{class:'item',onclick:()=>{ close(); tab='plot'; newProject('無題のプロット'); }},'新しい作品'),
     h('button',{class:'item',onclick:()=>{ close(); openNewSeries(); }},'新しいシリーズ'),
+    h('button',{class:'item',onclick:()=>{ close(); const sp=sampleProject(); projects[sp.id]=sp; selected.clear(); cur=sp.id; lsSet(LS_CUR,cur); touch(sp); renderAll(); toast('サンプルを追加しました'); }},'サンプルを追加'),
     S?h('button',{class:'item',onclick:()=>{ close(); newEpisode(S); }},`次の話を作る（第${nextEp(S)}話）`):null,
     h('hr'),
     h('button',{class:'item',onclick:()=>{ close(); const c=normalize({...clone(rec(p)),id:rid('p'),title:(p.title||'')+'のコピー',createdAt:Date.now(),sample:false,remoteId:null,syncedAt:0}); projects[c.id]=c; if(!c.series){ c.chars=clone(p.chars); c.notes=clone(p.notes); } linkSeries(); cur=c.id; touch(c); renderAll(); toast('複製しました'); }},'この作品を複製'),
@@ -2691,7 +3154,7 @@ $('#jsonInput').addEventListener('change',async e=>{
       if(p.series){ // シリーズはまとめて1つの新しいシリーズとして読み込む
         if(!smap[p.series]){
           const rs=rser.find(x=>x&&x.id===raw.series);
-          const S=makeSeries(String((rs&&rs.name)||raw.seriesName||'シリーズ')+(seriesMap[raw.series]?'（読み込み）':''),rs?clone(rs.chars||[]):p.chars,rs?clone(rs.notes||[]):p.notes,rs?clone(rs.foreshadows||[]):p.foreshadows);
+          const S=makeSeries(String((rs&&rs.name)||raw.seriesName||'シリーズ')+(seriesMap[raw.series]?'（読み込み）':''),rs?clone(rs.chars||[]):p.chars,rs?clone(rs.notes||[]):p.notes,rs?clone(rs.foreshadows||[]):p.foreshadows,rs?clone(rs.rels||[]):p.rels);
           S.chars.forEach(c=>{ const before=c.images.length; c.images=c.images.filter(i=>i.d); if(c.images.length<before) lost++; });
           smap[p.series]=S.id;
         }

@@ -1,7 +1,7 @@
 {
- "version": "plotcho-v21",
+ "version": "plotcho-v30",
  "desktop": "1.6.0",
- "date": "2026-10-26",
+ "date": "2026-11-02",
  "files": [
   "drive.js",
   "help.html",
@@ -39,6 +39,8 @@
   "docs/screenshots/29-series-chars.png",
   "docs/screenshots/30-series-menu.png",
   "docs/screenshots/31-fs-series.png",
+  "docs/screenshots/32-relmap.png",
+  "docs/screenshots/33-rel-edit.png",
   "icons/apple-touch-icon.png",
   "icons/favicon-64.png",
   "icons/icon-192.png",
