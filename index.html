@@ -1245,13 +1245,36 @@ function cardEl(c){
       h('button',{class:'mini del','data-act':'del','aria-label':'削除',title:'削除'},'×')),
     fsTag(c));
 }
-function startEdit(el){
+function startEdit(el,at){
   if(!el||el.classList.contains('editing')) return;
   const {card}=findCard(el.dataset.id); if(!card) return;
   const ta=h('textarea',{rows:1,'aria-label':TYPE_LABEL[card.type],placeholder:PH[card.type],value:card.text});
   el.classList.add('editing');
   el.querySelector('.bubble').replaceChildren(ta);
-  autosize(ta); ta.focus(); try{ ta.setSelectionRange(ta.value.length,ta.value.length); }catch{}
+  autosize(ta); ta.focus(); const pos=at==='start'?0:ta.value.length; try{ ta.setSelectionRange(pos,pos); }catch{}
+}
+// カーソルが見た目の1行目／最後の行にあるか(折り返しも含めて調べる)
+function caretEdge(ta){
+  const cs=getComputedStyle(ta), d=document.createElement('div');
+  for(const k of ['fontFamily','fontSize','fontWeight','fontStyle','lineHeight','letterSpacing','paddingTop','paddingRight','paddingBottom','paddingLeft','boxSizing','wordBreak','overflowWrap','lineBreak','textIndent','tabSize'])
+    d.style[k]=cs[k];
+  Object.assign(d.style,{position:'absolute',visibility:'hidden',left:'-9999px',top:'0',whiteSpace:'pre-wrap',width:ta.clientWidth+'px'});
+  const pos=ta.selectionStart, mk=()=>{ const m=document.createElement('span'); m.textContent='\u200b'; return m; };
+  // カーソルの位置は「次の1文字」で測る(行の折り返し目でずれないように)
+  const a=mk(), b=mk(), z=mk(); if(pos<ta.value.length&&ta.value[pos]!=='\n') a.textContent=ta.value[pos];
+  d.append(z, ta.value.slice(0,pos), a, ta.value.slice(pos+(a.textContent==='\u200b'?0:1)), b);
+  document.body.append(d);
+  const top=z.offsetTop, here=a.offsetTop, end=b.offsetTop; d.remove();
+  return {first:here<=top+2, last:here>=end-2};
+}
+// ↑↓で前後のカードへ(折りたたんだシーンのカードはとばす)
+function editNeighbor(el,dir){
+  const ids=flatIds(); let i=ids.indexOf(el.dataset.id);
+  for(i+=dir;i>=0&&i<ids.length;i+=dir){
+    const next=board.querySelector(`.card[data-id="${ids[i]}"]`);
+    if(next&&next.offsetParent){ el.querySelector('textarea')?.blur(); startEdit(next,dir>0?'start':'end'); next.scrollIntoView({block:'nearest',inline:'nearest'}); return true; }
+  }
+  return false;
 }
 function endEdit(el){
   if(!el||!el.classList.contains('editing')) return;
@@ -1788,6 +1811,13 @@ board.addEventListener('keydown',e=>{
     if(!before){ t.value=rest; card.text=rest; autosize(t); touch(); return; }
     card.text=before; touch();
     addCard(scene,card.type,idx+1,null,rest);
+    return;
+  }
+  // ↓で次のカード、↑で前のカード(カーソルが最後の行／最初の行にあるとき)
+  if((e.key==='ArrowDown'||e.key==='ArrowUp')&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.isComposing&&e.keyCode!==229&&t.matches('.card textarea')
+     &&t.selectionStart===t.selectionEnd){
+    const edge=caretEdge(t), down=e.key==='ArrowDown';
+    if(down?edge.last:edge.first){ if(editNeighbor(t.closest('.card'),down?1:-1)) e.preventDefault(); }
     return;
   }
   if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&e.target.matches('.card textarea')){
