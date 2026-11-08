@@ -132,7 +132,7 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .selbar button.danger{color:#FFB4A8}
 .selbar button.x{background:transparent;font-size:18px;padding:0 8px}
 body.has-selbar .toast{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
-@media (max-width:640px){.selbar{left:10px;right:10px;transform:none;max-width:none;flex-wrap:nowrap;justify-content:space-between;gap:4px;padding:7px 8px}.selbar b{font-size:12.5px;padding:0 2px}.selbar button{padding:0 9px;font-size:13px}.selbar button.x{padding:0 4px}}
+@media (max-width:640px){.selbar{left:10px;right:10px;transform:none;max-width:none;flex-wrap:wrap;justify-content:center;gap:4px;padding:7px 8px}.selbar b{font-size:12.5px;padding:0 2px}.selbar button{padding:0 9px;font-size:13px}.selbar button.x{padding:0 4px}}
 body.has-selbar main{padding-bottom:120px}
 .pop .dest{display:flex;flex-direction:column;max-height:min(60vh,420px);overflow:auto}
 .pop .dest .sec-l{font-size:11.5px;font-weight:700;padding:8px 10px 2px;color:var(--hue)}
@@ -1548,6 +1548,22 @@ function deleteSel(){
   clearSel();
 }
 let selbarEl=null;
+// 選んだカードの種類(セリフ・ト書きなど)や話者を、まとめて変える
+function selCardsNow(){ const out=[]; for(const s of P().sections) for(const n of s.scenes) for(const c of n.cards) if(selected.has(c.id)) out.push(c); return out; }
+function selTypeMenu(anchor){
+  const cards=selCardsNow(); if(!cards.length) return;
+  const same=k=>cards.every(c=>c.type===k);
+  const setType=(k,label)=>{ withUndo(`${cards.length}枚を「${label}」にしました`,()=>{ cards.forEach(c=>{ c.type=k; }); }); };
+  const setSpk=(id,label)=>{ withUndo(`${cards.length}枚の話者を「${label}」にしました`,()=>{ cards.forEach(c=>{ c.speaker=id; if(id&&c.type!=='serif'&&c.type!=='mono') c.type='serif'; }); }); };
+  popover(anchor,close=>[
+    h('div',{class:'label'},`${cards.length}枚の種類を変える`),
+    ...TYPES.map(([k,l])=>h('button',{class:'item'+(same(k)?' on':''),onclick:()=>{ close(); setType(k,l); }},l)),
+    h('hr'),
+    h('div',{class:'label'},'話者を変える'),
+    ...P().chars.map(c=>h('button',{class:'item'+(cards.every(x=>x.speaker===c.id)?' on':''),onclick:()=>{ close(); setSpk(c.id,c.name||'名前未設定'); }},c.name||'名前未設定')),
+    h('button',{class:'item',onclick:()=>{ close(); setSpk('','なし'); }},'話者なし')
+  ]);
+}
 function renderSelBar(){
   const show=selected.size>0||selectMode;
   document.body.classList.toggle('has-selbar',show);
@@ -1557,6 +1573,7 @@ function renderSelBar(){
   selbarEl.replaceChildren(
     h('b',null,n?`${n}枚選択中`:(matchMedia('(pointer:coarse)').matches?'押すか、なぞって囲んで選択':'クリックか、ドラッグで囲んで選択')),
     n?h('button',{id:'selMove',onclick:e=>destMenu(e.currentTarget)},'移動…'):null,
+    n?h('button',{id:'selType',onclick:e=>selTypeMenu(e.currentTarget)},'種類・話者…'):null,
     n?h('button',{onclick:selToNewScene},'新しいシーンに'):null,
     n?h('button',{class:'danger',onclick:deleteSel},'削除'):null,
     h('button',{class:'x','aria-label':'選択をやめる',title:'選択をやめる',onclick:()=>setSelectMode(false)},'×'));
@@ -2698,7 +2715,10 @@ function popover(anchor,build){
   popEl=h('div',{class:'pop',role:'menu'},build(close));
   document.body.append(popEl);
   const r=anchor.getBoundingClientRect(); const w=popEl.offsetWidth;
-  popEl.style.top=(r.bottom+scrollY+6)+'px';
+  // 下に入りきらないときは、上に出す(画面の下にある選択バーなど)
+  const ph=popEl.offsetHeight, below=innerHeight-r.bottom-12, above=r.top-12;
+  if(ph>below&&above>below){ popEl.style.maxHeight=above+'px'; popEl.style.overflowY='auto'; popEl.style.top=(r.top+scrollY-6-Math.min(ph,above))+'px'; }
+  else{ if(ph>below){ popEl.style.maxHeight=below+'px'; popEl.style.overflowY='auto'; } popEl.style.top=(r.bottom+scrollY+6)+'px'; }
   popEl.style.left=Math.max(8,Math.min(r.right-w,innerWidth-w-8)+scrollX)+'px';
   setTimeout(()=>{ document.addEventListener('pointerdown',outside,true); document.addEventListener('keydown',esc); });
   popEl.querySelector('button')?.focus({preventScroll:true});

@@ -1,7 +1,7 @@
 {
- "version": "plotcho-v30",
+ "version": "plotcho-v31",
  "desktop": "1.6.0",
- "date": "2026-11-02",
+ "date": "2026-11-08",
  "files": [
   "drive.js",
   "help.html",
